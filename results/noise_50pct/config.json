@@ -1,0 +1,26 @@
+{
+  "q_values": [
+    1.5,
+    1.9
+  ],
+  "b_values": [
+    2.0,
+    5.0
+  ],
+  "n": 2000,
+  "mu": 0.0,
+  "bins": 50,
+  "repetitions": 10,
+  "noise_fraction": 0.5,
+  "noise_definition": "additive iid Gaussian; SD = fraction / sqrt(b*(3-q))",
+  "seed": 20260926,
+  "methods": [
+    "pdf",
+    "mle",
+    "qlog",
+    "cdf"
+  ],
+  "python": "3.12.14",
+  "numpy": "2.3.5",
+  "scipy": "1.17.0"
+}

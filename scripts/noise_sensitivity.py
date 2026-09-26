@@ -139,7 +139,7 @@ def comparisons(rows):
     return paired, disagreements, changes
 
 
-def plot_disagreement(disagreement, path, repetitions):
+def plot_disagreement(disagreement, path, repetitions, noise_fraction):
     fig, axes = plt.subplots(1,2,figsize=(11,4.6))
     scenarios = [(q,b) for q in QS for b in BS]
     labels = [f"q={q}, b={b:g}" for q,b in scenarios]
@@ -149,7 +149,7 @@ def plot_disagreement(disagreement, path, repetitions):
         for offset,condition,color in ((-.19,"clean","#277da1"),(.19,"noisy","#e07a29")):
             values = [next(r[field] for r in disagreement if r["q_true"]==q and
                            r["b_true"]==b and r["condition"]==condition) for q,b in scenarios]
-            ax.bar(x+offset,values,width=.36,label="Limpia" if condition=="clean" else "Ruido 10%",
+            ax.bar(x+offset,values,width=.36,label="Limpia" if condition=="clean" else f"Ruido {noise_fraction:g}%",
                    color=color)
         ax.set_xticks(x,labels,rotation=25,ha="right")
         ax.set_title(title)
@@ -206,7 +206,8 @@ def main():
     write_csv(args.output_dir/"paired_changes.csv",PAIRED,paired)
     write_csv(args.output_dir/"disagreement.csv",DISAGREEMENT,disagreement)
     write_csv(args.output_dir/"disagreement_change.csv",DISAGREEMENT_CHANGE,changes)
-    plot_disagreement(disagreement,args.output_dir/"disagreement.png",args.repetitions)
+    plot_disagreement(disagreement,args.output_dir/"disagreement.png",args.repetitions,
+                      100*args.noise_fraction)
 
 
 if __name__ == "__main__":
