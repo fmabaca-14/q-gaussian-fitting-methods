@@ -16,3 +16,16 @@ y `results/pilot_v2.json` (parámetros y versiones). Para una prueba rápida,
 usar `--repetitions 2`. El código del primer piloto sigue disponible en el
 historial Git; sus archivos `results/pilot.csv` y `results/pilot.json` se
 conservan como referencia. Véase `results/README.md` para limitaciones.
+
+## Sensibilidad a la cantidad de bins
+
+```powershell
+python -m scripts.bins_sensitivity
+```
+
+Genera 10 muestras por escenario con q=1.5/1.9, b=2/5 y N=1000/5000.
+Cada muestra se ajusta con 20, 30, 40, 50, 70, 100, 150 y 200 bins,
+compartiendo los datos entre PDF y q-log. Los resultados estan en
+`results/bins_sensitivity/`: `detail.csv`, `summary.csv`, `config.json`
+y la figura `q_vs_bins.png`. Consultar el README de esa carpeta para
+interpretar la figura y los limites de este experimento exploratorio.
