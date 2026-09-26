@@ -72,3 +72,49 @@ python -m scripts.bins_sensitivity --repetitions 20 --bins-start 10 --bins-stop 
 ```
 
 Esta corrida se guarda aparte en `results/bins_sensitivity_20/`.
+
+## Ajustes empíricos con ubicación libre
+
+Los análisis siguientes están separados del piloto sintético centrado de
+`src/estimators.py`. Usan `src/real_data.py` para leer los archivos y
+`src/distributions.py` para PDF/CDF normalizadas. En `src/empirical.py`,
+las variables ajustadas son, sin recentrado ni cambio de escala:
+
+- Viento solar: `2*(np[t+1]-np[t])/(np[t+1]+np[t])`, entre horas consecutivas.
+- Bitcoin: `log(close[t+1]/close[t])`, entre días consecutivos.
+- Caudal: `2*(Q[t+1]-Q[t])/(Q[t+1]+Q[t])`, entre días consecutivos.
+
+Se excluyen los pares que cruzan huecos de tiempo después de la limpieza de
+datos. Los parámetros `b`, `q` y `mu` son libres, con `b>0` y `1<q<3`.
+El ajuste directo reproduce el histograma de **ancho uniforme** en todo el
+rango, omite bins vacíos y pondera las densidades con
+`sqrt(count)/(N*width)`. MLE optimiza la log-verosimilitud individual; CDF
+minimiza el error cuadrático frente a la CDF empírica. Q-log recorre q con
+paso 0.01, ajusta `ln_q(density)` frente a `1, x, x²`, deriva `mu` del
+vértice y `b` de la pendiente y la normalización; selecciona el candidato
+por un score de Pearson sobre todos los conteos. Los bins amplios en colas
+hacen que la aproximación en centros de bin del q-log sea especialmente
+frágil. Estos cuatro métodos optimizan **objetivos diferentes**.
+
+Desde la raíz del repositorio, con los tres archivos en `data/raw/`:
+
+```powershell
+$data = "data/raw"
+python -m scripts.compare_real_methods --solar "$data/1980-2024 np.txt" --bitcoin "$data/Bitcoin_15_10_2013-14_12_2013_historical_data_coinmarketcap.xls" --discharge "$data/daily-data-mean.xls" --bins 50
+python -m scripts.real_bins_sensitivity --solar "$data/1980-2024 np.txt" --bitcoin "$data/Bitcoin_15_10_2013-14_12_2013_historical_data_coinmarketcap.xls" --discharge "$data/daily-data-mean.xls" --bins-start 10 --bins-stop 200 --bins-step 5
+```
+
+El primer comando escribe `results/empirical_50/fits.csv` y `fits.png`.
+El segundo escribe `results/empirical_bins/detail.csv`, `summary.csv`,
+`references.csv` y `q_vs_bins.png`. `detail.csv` incluye `b`, `q`, `mu`,
+bins ocupados, estado y objetivo para cada combinación. MLE y CDF se
+calculan una vez por dataset y figuran como referencias independientes de
+los bins. Los directorios de salida se pueden cambiar con `--output-dir`.
+
+El gráfico de densidades muestra solo los percentiles 0.1 a 99.9 en el eje
+horizontal, pero los ajustes usan **todos** los incrementos y el histograma
+completo. `r2_hist`, `chi2_hist` y `cdf_max_abs` son diagnósticos descriptivos:
+los errores Poisson y las comparaciones no corrigen dependencia temporal.
+La desviación de q a través de distintos números de bins tampoco es un
+intervalo de confianza. La variable simétrica de caudal pertenece a `(-2,2)`;
+la q-Gaussiana normalizada asigna probabilidad fuera de ese soporte.
