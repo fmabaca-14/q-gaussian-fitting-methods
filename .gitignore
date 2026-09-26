@@ -206,6 +206,9 @@ tempCodeRunnerFile.py
 # Ruff stuff:
 .ruff_cache/
 
+# Original research exports stay local; code refers to them by command-line path.
+data/raw/
+
 # PyPI configuration file
 .pypirc
 
