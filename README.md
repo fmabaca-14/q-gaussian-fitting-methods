@@ -37,3 +37,15 @@ python -m scripts.bins_sensitivity --repetitions 20 --bins-start 10 --bins-stop 
 ```
 
 Esta corrida se guarda aparte en `results/bins_sensitivity_20/`.
+
+## Ruido aditivo y concordancia entre métodos
+
+```powershell
+python -m scripts.noise_sensitivity
+```
+
+Para q=1.5/1.9, b=2/5 y N=2000 se generan diez muestras limpias y
+sus versiones pareadas con ruido gaussiano independiente de desviación
+estándar igual al 10 % de la escala Student-t equivalente. Se ajustan
+los cuatro métodos con mu=0 (PDF y q-log con 50 bins). Los resultados
+se guardan en `results/noise_10pct/`.
