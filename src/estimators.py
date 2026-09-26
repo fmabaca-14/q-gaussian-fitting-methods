@@ -43,8 +43,8 @@ def histogram(data, bins=50):
     crece geometricamente hasta el maximo observado. La division central
     no depende de la posicion de la observacion mas extrema.
     """
-    if bins < 20 or bins % 10:
-        raise ValueError("bins debe ser multiplo de 10 y >= 20")
+    if bins < 10 or bins % 10:
+        raise ValueError("bins debe ser multiplo de 10 y >= 10")
     absx = np.abs(data)
     r = max(float(np.quantile(absx, .9)), 1e-10)
     outer = max(float(absx.max()) * (1 + 1e-9), r * (1 + 1e-9))
@@ -157,6 +157,22 @@ def fit(data, method, bins=50, q_grid=DEFAULT_Q_GRID, hist=None):
                 candidates.append(result)
         except (ValueError, FloatingPointError, OverflowError):
             continue
+    if method == "pdf":
+        # L-BFGS-B puede declarar convergencia en una cuenca local de la
+        # deviance agrupada. Comparar con anclas fijadas antes del estudio;
+        # si alguna es mejor, reiniciar desde la mejor ancla.
+        anchors = ((1.4, .5), (1.4, 5.), (1.9, .5), (1.9, 5.),
+                   (2.4, .5), (2.4, 5.))
+        ranked = sorted((objective(anchor), anchor) for anchor in anchors)
+        if not candidates or ranked[0][0] + 1e-7 < min(c.fun for c in candidates):
+            for _, anchor in ranked[:2]:
+                try:
+                    result = minimize(objective, anchor, bounds=(Q_BOUNDS, B_BOUNDS),
+                                      method="L-BFGS-B", options={"maxiter": 500, "ftol": 1e-11})
+                    if result.success and np.isfinite(result.fun):
+                        candidates.append(result)
+                except (ValueError, FloatingPointError, OverflowError):
+                    continue
     if not candidates:
         return Fit(message="optimizacion fallida", occupied_bins=occupied)
     result = min(candidates, key=lambda res: res.fun)

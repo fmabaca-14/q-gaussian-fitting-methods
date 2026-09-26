@@ -1,5 +1,10 @@
 # Sensibilidad a los bins: experimento exploratorio
 
+**Nota:** esta primera corrida con 10 muestras conserva la version anterior
+del optimizador PDF, que en algunas combinaciones de bins acepto minimos
+locales espurios. Para comparar tendencias utilizar preferentemente la
+corrida corregida `../bins_sensitivity_20/`.
+
 Ejecutar `python -m scripts.bins_sensitivity` desde la raiz del repositorio.
 Por cada escenario (q=1.5/1.9; b=2/5; N=1000/5000) se generaron diez
 muestras independientes. Cada muestra se reutilizo para los ocho valores

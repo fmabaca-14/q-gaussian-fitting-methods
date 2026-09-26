@@ -29,3 +29,11 @@ compartiendo los datos entre PDF y q-log. Los resultados estan en
 `results/bins_sensitivity/`: `detail.csv`, `summary.csv`, `config.json`
 y la figura `q_vs_bins.png`. Consultar el README de esa carpeta para
 interpretar la figura y los limites de este experimento exploratorio.
+
+Para la extension con 20 corridas y 10, 20, ..., 200 bins:
+
+```powershell
+python -m scripts.bins_sensitivity --repetitions 20 --bins-start 10 --bins-stop 200 --bins-step 10 --output-dir results/bins_sensitivity_20
+```
+
+Esta corrida se guarda aparte en `results/bins_sensitivity_20/`.

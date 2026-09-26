@@ -107,11 +107,23 @@ def main():
     parser.add_argument("--repetitions", type=int, default=10)
     parser.add_argument("--seed", type=int, default=20260926)
     parser.add_argument("--output-dir", type=Path, default=Path("results/bins_sensitivity"))
+    parser.add_argument("--bins-start", type=int)
+    parser.add_argument("--bins-stop", type=int)
+    parser.add_argument("--bins-step", type=int, default=10)
     args = parser.parse_args()
     if args.repetitions < 2:
         parser.error("repetitions debe ser al menos 2 para calcular dispersion")
+    if (args.bins_start is None) != (args.bins_stop is None):
+        parser.error("indicar --bins-start y --bins-stop juntos")
+    if args.bins_step <= 0:
+        parser.error("--bins-step debe ser positivo")
+    bins_grid = (tuple(range(args.bins_start, args.bins_stop + 1, args.bins_step))
+                 if args.bins_start is not None else BINS)
+    if (not bins_grid or any(v < 10 or v % 10 for v in bins_grid)
+            or bins_grid[-1] != (args.bins_stop if args.bins_stop is not None else bins_grid[-1])):
+        parser.error("bins deben ser multiplos de 10, desde 10, e incluir el ultimo valor")
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    config = dict(q_values=QS, b_values=BS, sample_sizes=NS, bins=BINS,
+    config = dict(q_values=QS, b_values=BS, sample_sizes=NS, bins=bins_grid,
                   repetitions=args.repetitions, seed=args.seed, mu=0.0,
                   methods=METHODS, qlog_grid=list(DEFAULT_Q_GRID),
                   python=platform.python_version(), numpy=np.__version__,
@@ -127,7 +139,7 @@ def main():
                     rng = np.random.default_rng(np.random.SeedSequence(seed))
                     data = generate(rng, n, q, b)
                     max_abs_x = float(np.max(np.abs(data)))
-                    for bins in BINS:
+                    for bins in bins_grid:
                         hist = histogram(data, bins)
                         assert hist[1].sum() == n
                         for method in METHODS:
