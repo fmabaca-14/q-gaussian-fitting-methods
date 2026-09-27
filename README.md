@@ -49,3 +49,12 @@ sus versiones pareadas con ruido gaussiano independiente de desviación
 estándar igual al 10 % de la escala Student-t equivalente. Se ajustan
 los cuatro métodos con mu=0 (PDF y q-log con 50 bins). Los resultados
 se guardan en `results/noise_10pct/`.
+
+Para barrer 10, 20, ..., 200 bins con esas mismas muestras limpias y
+ruidosas, y comparar PDF y q-log con las referencias MLE/CDF:
+
+```powershell
+python -m scripts.noise_bins_sensitivity
+```
+
+Los resúmenes y las figuras de q y b están en `results/noise_bins_10pct/`.
