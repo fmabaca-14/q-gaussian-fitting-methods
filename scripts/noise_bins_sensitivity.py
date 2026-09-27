@@ -28,7 +28,7 @@ ANALYSIS = ("q_true", "b_true", "method", "condition", "valid_at_all_bins",
             "mean_b_200", "span_mean_b", "max_failure_rate")
 
 
-def plot(summary, refs, path, parameter):
+def plot(summary, refs, path, parameter, noise_fraction):
     field = "mean_q_hat" if parameter == "q" else "mean_b_hat"
     fig, axes = plt.subplots(2, 4, figsize=(18, 8), sharex=True)
     scenarios = [(q, b) for q in QS for b in BS]
@@ -51,7 +51,7 @@ def plot(summary, refs, path, parameter):
                                 s["condition"] == cond), key=lambda s: s["bins"])
                 ax.plot([s["bins"] for s in group], [s[field] for s in group],
                         style, color=color, marker="o", ms=2.5,
-                        lw=1.5, label="Sin ruido" if cond == "clean" else "Ruido 10 %")
+                        lw=1.5, label="Sin ruido" if cond == "clean" else f"Ruido {100*noise_fraction:g} %")
             ax.set_title(f"{method.upper()} · q={q:g}, b={b:g}")
             ax.grid(alpha=.2)
             if row == 1:
@@ -167,7 +167,8 @@ def main():
                                          max_failure_rate=max(s["failures"]/s["repetitions"] for s in sub)))
     write_csv(args.output_dir / "analysis.csv", ANALYSIS, analysis)
     for parameter in ("q", "b"):
-        plot(summary, references, args.output_dir / f"{parameter}_vs_bins.png", parameter)
+        plot(summary, references, args.output_dir / f"{parameter}_vs_bins.png", parameter,
+             args.noise_fraction)
 
 
 if __name__ == "__main__":

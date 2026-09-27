@@ -58,3 +58,11 @@ python -m scripts.noise_bins_sensitivity
 ```
 
 Los resúmenes y las figuras de q y b están en `results/noise_bins_10pct/`.
+
+Con las mismas muestras y ruido ampliado al 50 %:
+
+```powershell
+python -m scripts.noise_bins_sensitivity --noise-fraction 0.5 --output-dir results/noise_bins_50pct
+```
+
+Los resultados comparables quedan en `results/noise_bins_50pct/`.
