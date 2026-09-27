@@ -118,3 +118,34 @@ los errores Poisson y las comparaciones no corrigen dependencia temporal.
 La desviación de q a través de distintos números de bins tampoco es un
 intervalo de confianza. La variable simétrica de caudal pertenece a `(-2,2)`;
 la q-Gaussiana normalizada asigna probabilidad fuera de ese soporte.
+
+## Evaluación descriptiva del cuerpo y las colas
+
+`src/empirical_scores.py` implementa métricas comunes para los parámetros
+producidos por los cuatro ajustes empíricos. Desde la raíz del proyecto:
+
+```powershell
+$data = "data/raw"
+python -m scripts.evaluate_real_methods --solar "$data/1980-2024 np.txt" --bitcoin "$data/Bitcoin_15_10_2013-14_12_2013_historical_data_coinmarketcap.xls" --discharge "$data/daily-data-mean.xls"
+```
+
+En `results/empirical_scores/` se generan `global_evaluation.csv` (18 filas),
+`tail_threshold_errors.csv` (6 umbrales por ajuste), `tail_summary.csv`,
+`exceedance_curves.csv`, `exceedance_curves.png` y `config.json`. PDF y q-log
+se ajustan con 50 y 100 bins; MLE y CDF, una vez por dataset. Todos se evalúan
+sobre **la misma muestra** y con un histograma común de 100 bins para R² y χ².
+
+La distancia integrada reportada es `dic_dfn = mean((F_model(x_i)-F_n(x_i))²)`:
+integra respecto de la distribución empírica, **no respecto de dx**. Para
+valores repetidos se usa la CDF empírica continua por la derecha. `ks` toma
+el máximo de las diferencias a ambos lados de sus saltos. Las seis cotas de
+cola se fijan por dataset en los percentiles 1, 5, 10, 90, 95 y 99;
+`error_pp = 100*(probabilidad_modelo-probabilidad_observada)`, con `X<=u`
+a la izquierda y `X>u` a la derecha. `tail_mae_pp` promedia sus seis errores
+absolutos. Las curvas muestran la probabilidad de excedencia derecha.
+
+Estas comparaciones son **dentro de la misma muestra** usada para estimar
+parámetros: la distancia CDF puede favorecer al ajuste CDF. Los umbrales son
+cuantiles de esa misma muestra; las dependencias temporales y posibles cambios
+de régimen siguen requiriendo análisis adicional. `r2_hist_100` depende de la
+elección del histograma y no tiene unidades probabilísticas.
