@@ -119,6 +119,23 @@ La desviación de q a través de distintos números de bins tampoco es un
 intervalo de confianza. La variable simétrica de caudal pertenece a `(-2,2)`;
 la q-Gaussiana normalizada asigna probabilidad fuera de ese soporte.
 
+Para generar dos figuras individuales por dataset usando 100 bins para el
+histograma, PDF directo y q-log (MLE/CDF siguen sin bins):
+
+```powershell
+python -m scripts.plot_empirical_fits --solar "$data/1980-2024 np.txt" --bitcoin "$data/Bitcoin_15_10_2013-14_12_2013_historical_data_coinmarketcap.xls" --discharge "$data/daily-data-mean.xls" --bins 100
+```
+
+`results/empirical_figures/` contendrá `solar_body.png`, `solar_tails.png`,
+`bitcoin_body.png`, `bitcoin_tails.png`, `discharge_body.png` y
+`discharge_tails.png`. La figura del cuerpo usa escala lineal y muestra el
+intervalo de los percentiles 1–99 para apreciar el pico. La figura de las
+colas usa escala logarítmica desde cada umbral empírico unilateral del 10 %
+hasta el extremo observado: arriba muestra la misma PDF de 100 bins, abajo
+la probabilidad de excedencia empírica y modelada. No se reajusta ni
+renormaliza la distribución al graficar la cola. Las barras de error de la
+PDF son Poisson descriptivas y no incorporan dependencia temporal.
+
 ## Evaluación descriptiva del cuerpo y las colas
 
 `src/empirical_scores.py` implementa métricas comunes para los parámetros
