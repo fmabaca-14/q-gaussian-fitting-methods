@@ -166,3 +166,42 @@ parámetros: la distancia CDF puede favorecer al ajuste CDF. Los umbrales son
 cuantiles de esa misma muestra; las dependencias temporales y posibles cambios
 de régimen siguen requiriendo análisis adicional. `r2_hist_100` depende de la
 elección del histograma y no tiene unidades probabilísticas.
+
+## Variante q-log centrada con selección por error ponderado
+
+`src/qlog_variants.py` agrega `fit_centered_qlog`: impone `mu=0` sin restar la
+media a las observaciones, ajusta `ln_q(density)` frente a `1,x²` y selecciona
+q por el menor `sum((residual/sigma_lnq)²)` en la grilla. Usa los mismos bins
+uniformes y errores Poisson que el ajuste empírico existente. Ejemplo:
+
+```python
+import pandas as pd
+from src.empirical import fit_histogram, load_increments
+from src.qlog_variants import fit_centered_qlog
+from src.empirical_scores import body_scores, tail_scores, tail_thresholds
+
+datasets = load_increments(
+    "data/raw/1980-2024 np.txt",
+    "data/raw/Bitcoin_15_10_2013-14_12_2013_historical_data_coinmarketcap.xls",
+    "data/raw/daily-data-mean.xls",
+)
+x = datasets["bitcoin"]["x"]
+original = fit_histogram(x, bins=100, method="qlog")
+centered, scan = fit_centered_qlog(x, bins=100, return_scan=True)
+scan_table = pd.DataFrame(scan)
+thresholds = tail_thresholds(x)
+for result in (original, centered):
+    if result.success:
+        print(result)
+        print(body_scores(x, result))
+        print("Tail MAE (pp):", tail_scores(x, result, thresholds)[1])
+```
+
+El intercepto se ajusta libremente; b se deriva de la pendiente usando la
+normalización. `normalization_intercept_gap` registra la diferencia con el
+intercepto de la PDF normalizada reconstruida. Por eso `weighted_sse` mide
+el error de la regresión, no necesariamente el de esa PDF. Los errores y la
+transformación cambian con q; el mínimo entre valores de q es un criterio
+experimental y no garantiza el mejor ajuste de las colas. Esta comparación
+cambia tanto la ubicación como el criterio de selección respecto del q-log
+original, por lo que no permite atribuir diferencias a un solo factor.
