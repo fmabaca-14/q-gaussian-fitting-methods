@@ -169,6 +169,32 @@ elección del histograma y no tiene unidades probabilísticas.
 
 ## Variante q-log centrada con selección por error ponderado
 
+**Estado del análisis empírico (30/09/2026):** se mantiene el q-log original
+de `src/empirical.py`, con `mu` libre y selección por Pearson, como método
+principal de la comparación. La variante centrada se conserva como
+implementación experimental para estudiar sus diferencias.
+
+La comparación con los tres datasets y el barrido de 10 a 200 bins, en pasos
+de 5, mostró mayor variabilidad de los parámetros de la variante nueva y
+saltos pronunciados para ciertos números de bins. En viento solar, con
+190 bins, seleccionó `q=2.98` (límite superior de la grilla) y
+`b≈8.2e-306`. En caudal, usando `Q[t+1]-Q[t]` sin normalizar, también
+aparecieron soluciones de borde con `b` extremadamente pequeño.
+Estos resultados no se interpretan como estimaciones físicas confiables.
+La evaluación de colas con 50, 100 y 150 bins tampoco mostró una mejora
+general de la variante nueva.
+
+Hipótesis a investigar: cambios de ocupación y posición de los bins;
+selección entre regresiones cuya transformación y ponderación dependen de
+`q`; incompatibilidad entre el intercepto libre y la normalización de la
+PDF reconstruida; y amplificación de cambios de pendiente al convertirla
+a `b`, pues esa conversión contiene el exponente `2/(3-q)`.
+El centrado impuesto también puede afectar series asimétricas o desplazadas.
+Esta prueba cambia simultáneamente `mu` y el criterio de selección de `q`,
+por lo que no identifica por separado sus efectos. Las causas propuestas
+requieren pruebas adicionales; la sensibilidad a bins no es un intervalo
+de confianza.
+
 `src/qlog_variants.py` agrega `fit_centered_qlog`: impone `mu=0` sin restar la
 media a las observaciones, ajusta `ln_q(density)` frente a `1,x²` y selecciona
 q por el menor `sum((residual/sigma_lnq)²)` en la grilla. Usa los mismos bins
