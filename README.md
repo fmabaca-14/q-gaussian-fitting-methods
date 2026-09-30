@@ -1,6 +1,32 @@
 # q-gaussian-fitting-methods
 Comparison of q-Gaussian parameter estimation methods in complex systems
 
+## Comparación gaussiana y q-Gaussiana
+
+`src/gaussian.py` ofrece `fit_gaussian_cdf(x)` con mu libre y sigma positiva.
+La comparación usa ajuste CDF para ambos modelos, con el mismo objetivo de
+error cuadrático frente a la CDF empírica de puntos medios. Para generar la
+figura con los tres datasets desde PowerShell:
+
+```powershell
+$data = "data/raw"
+python -m scripts.compare_gaussian_qgaussian --solar "$data/1980-2024 np.txt" --bitcoin "$data/Bitcoin_15_10_2013-14_12_2013_historical_data_coinmarketcap.xls" --discharge "$data/daily-data-mean.xls" --bins 100
+```
+
+Escribe `results/gaussian_comparison/gaussian_vs_qgaussian.png` y `fits.csv`.
+La figura muestra densidades en escala logarítmica y las únicas estadísticas
+anotadas son R² y q. Ambos R² usan todos los centros del mismo histograma de
+100 bins (o el número indicado por `--bins`), aunque ambos modelos se ajustan
+sin bins. Se muestra todo el rango observado. Un R² mayor describe ese
+histograma; no demuestra que CDF sea el mejor estimador ni constituye un test
+de selección de modelos.
+
+Por defecto se conserva el incremento simétrico del caudal utilizado por
+`load_increments`. Agregá `--discharge-transform difference` para usar
+Q[t+1]-Q[t], o `--discharge-transform mean-scaled` para dividir esa diferencia
+por el caudal medio. Se omiten pares que cruzan días faltantes. El CSV registra
+la transformación elegida; evitá comparar resultados con tratamientos distintos.
+
 ## Series reales
 
 `src/real_data.py` lee los tres formatos originales y devuelve tablas ordenadas
