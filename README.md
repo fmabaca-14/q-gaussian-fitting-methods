@@ -51,11 +51,13 @@ python -m scripts.compare_gaussian_qgaussian --solar "$data/1980-2024 np.txt" --
 Genera tres figuras individuales en `results/paper_gaussian_comparison/`:
 `solar_gaussian_comparison`, `bitcoin_gaussian_comparison` y
 `discharge_gaussian_comparison`, cada una en PDF vectorial y PNG a 600 dpi.
-Tamaño exacto 85 × 70 mm; ejes 9 pt, ticks/leyenda 8 pt; leyenda interior;
+Tamaño exacto 85 × 70 mm; ejes 9 pt, ticks 8 pt y leyenda 7,5 pt; leyenda interior;
 q-Gaussiana azul continua y Gaussiana naranja discontinua; ordenada logarítmica.
 No se recorta el tamaño físico al exportar. `fits.csv`, `provenance.json` y
 `captions.tex` registran resultados, tratamientos, tamaños y pies de figura.
-Las únicas estadísticas anotadas en las curvas son q y R².
+Las estadísticas anotadas son q, R² y MSE de la CDF de ambos modelos.
+El MSE corresponde al objetivo CDF, no al error de la PDF del histograma.
+Los límites de los ejes tienen margen adicional para separar curvas y leyenda.
 
 Para controles, `--free-mu` permite mu libre y `--discharge-transform
 symmetric` o `difference` permiten otras definiciones del caudal. Cambiar
