@@ -23,7 +23,7 @@ class EmpiricalTests(unittest.TestCase):
                                "2020-01-06T23:59:59.999Z;2\n", encoding="utf-8")
             river.write_text("time,value\n2020-01-01,2\n2020-01-02,4\n"
                              "2020-01-04,8\n2020-01-05,4\n2020-01-06,2\n", encoding="utf-8")
-            data = load_increments(solar, bitcoin, river)
+            data = load_increments(solar, bitcoin, river, discharge_transform="symmetric")
             np.testing.assert_allclose(data["solar"]["x"], [2/3, -2/3, -2/3])
             np.testing.assert_allclose(data["bitcoin"]["x"],
                                        [np.log(2), -np.log(2), -np.log(2)])
@@ -36,8 +36,8 @@ class EmpiricalTests(unittest.TestCase):
         nu = (3-q)/(q-1)
         sample = mu + t.rvs(df=nu, scale=1/np.sqrt(b*(3-q)),
                             size=12000, random_state=rng)
-        direct = fit_histogram(sample, 80, "pdf")
-        qlog = fit_histogram(sample, 80, "qlog")
+        direct = fit_histogram(sample, 80, "pdf", centered=False, weighting="poisson")
+        qlog = fit_histogram(sample, 80, "qlog", centered=False, weighting="poisson")
         self.assertTrue(direct.success and qlog.success)
         self.assertLess(abs(direct.mu-mu), 0.08)
         self.assertLess(abs(qlog.mu-mu), 0.12)

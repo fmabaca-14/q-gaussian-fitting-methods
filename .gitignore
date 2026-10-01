@@ -209,6 +209,9 @@ tempCodeRunnerFile.py
 # Original research exports stay local; code refers to them by command-line path.
 data/raw/
 
+# New paper outputs are generated artifacts, kept separate from legacy results.
+results/paper_*/
+
 # PyPI configuration file
 .pypirc
 

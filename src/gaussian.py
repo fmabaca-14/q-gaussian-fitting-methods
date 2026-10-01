@@ -15,11 +15,12 @@ class GaussianFit:
     message: str = ""
 
 
-def fit_gaussian_cdf(x):
-    """Fit location and positive standard deviation using midpoint ECDF SSE.
+def fit_gaussian_cdf(x, *, centered=True):
+    """Fit positive scale using midpoint ECDF SSE, with mu=0 by default.
 
     Matches empirical.fit_unbinned(..., 'cdf')'s CDF target. Optimization is
-    performed in standardized coordinates; no centering is imposed on the fit.
+    performed in standardized coordinates without subtracting a sample center
+    when centered=True. Use centered=False for the historical location fit.
     """
     x = np.asarray(x, dtype=float)
     if x.ndim != 1 or len(x) < 3 or not np.all(np.isfinite(x)):
@@ -27,23 +28,26 @@ def fit_gaussian_cdf(x):
     spread = float(np.std(x))
     if spread <= 0:
         return GaussianFit(message="zero sample spread")
-    origin = float(np.median(x))
+    origin = 0.0 if centered else float(np.median(x))
     z = np.sort((x-origin)/spread)
     target = (np.arange(len(x))+.5)/len(x)
 
     def objective(p):
-        return np.mean((norm.cdf(z, loc=p[0], scale=np.exp(p[1]))-target)**2)
+        loc = 0.0 if centered else p[0]
+        return np.mean((norm.cdf(z, loc=loc, scale=np.exp(p[-1]))-target)**2)
 
     robust = max(float(np.quantile(z,.75)-np.quantile(z,.25))/1.349, 1e-8)
-    trials = [minimize(objective, start, method="L-BFGS-B",
-                       bounds=((float(z.min()), float(z.max())), (-20., 20.)),
+    starts = ((np.log(robust),), (0.,)) if centered else ((0., np.log(robust)), (float(z.mean()), 0.))
+    bounds = ((-20., 20.),) if centered else ((float(z.min()), float(z.max())), (-20., 20.))
+    trials = [minimize(objective, start, method="L-BFGS-B", bounds=bounds,
                        options={"ftol":1e-13,"maxiter":500})
-              for start in ((0., np.log(robust)), (float(z.mean()), 0.))]
+              for start in starts]
     valid = [r for r in trials if r.success and np.isfinite(r.fun)]
     if not valid:
         return GaussianFit(message="CDF optimization failed")
     best = min(valid,key=lambda r:r.fun)
-    return GaussianFit(origin+spread*float(best.x[0]), spread*float(np.exp(best.x[1])),
+    return GaussianFit(0.0 if centered else origin+spread*float(best.x[0]),
+                       spread*float(np.exp(best.x[-1])),
                        True,float(best.fun),str(best.message))
 
 

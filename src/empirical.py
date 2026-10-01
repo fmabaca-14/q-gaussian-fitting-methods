@@ -1,9 +1,7 @@
-"""Exploratory q-Gaussian fits for the original, uncentered real-data increments.
+"""Paper estimators: mu=0, uniform PDF errors, original Pearson-selected q-log.
 
-This module is separate from ``estimators.py``: the synthetic pilot there
-fixes mu=0 and uses a different, tail-aware histogram construction.
-Here the direct PDF reproduces the paper's Poisson-weighted density fit on
-equal-width bins. Q-log uses a quadratic regression to allow a free mu.
+No sample mean or median is subtracted. Historical free-location/Poisson fits
+remain available through explicit keyword arguments.
 """
 
 from dataclasses import dataclass
@@ -29,13 +27,16 @@ class EmpiricalFit:
     message: str = ""
 
 
-def load_increments(solar, bitcoin, discharge):
+def load_increments(solar, bitcoin, discharge, discharge_transform="mean-scaled"):
     """Return chronological increments, omitting pairs across missing times.
 
-    Solar and river: 2*(next-current)/(next+current). Bitcoin: log(next/current).
-    No centering or rescaling is applied. Solar density and river flow must be
-    positive; otherwise the normalized difference is undefined here.
+    Solar: symmetric difference; Bitcoin: log-return; river: diff(Q)/mean(Q).
+    The river mean uses all cleaned observations, including those adjacent to
+    gaps. Gaps are excluded from pairs, not from that mean. No centering or
+    smoothing is applied. River zero values are allowed for mean-scaled/diff.
     """
+    if discharge_transform not in {"mean-scaled", "difference", "symmetric"}:
+        raise ValueError("unknown discharge transform")
     specs = (
         ("solar", load_solar_wind(solar), "np", "h", False),
         ("bitcoin", load_bitcoin(bitcoin), "close", "D", True),
@@ -44,16 +45,29 @@ def load_increments(solar, bitcoin, discharge):
     datasets = {}
     for name, frame, column, cadence, use_log in specs:
         values = frame[column].to_numpy(dtype=float)
-        if np.any(~np.isfinite(values)) or np.any(values <= 0):
-            raise ValueError(f"{name}: {column} must contain positive finite values")
+        if np.any(~np.isfinite(values)) or np.any(values < 0) or (
+                name != "discharge" and np.any(values == 0)) or (
+                name == "discharge" and discharge_transform == "symmetric" and np.any(values == 0)):
+            raise ValueError(f"{name}: invalid {column} values for increment definition")
         valid = np.diff(frame.index.values) == np.timedelta64(1, cadence)
-        increments = (np.log(values[1:] / values[:-1]) if use_log else
-                      2 * (values[1:] - values[:-1]) / (values[1:] + values[:-1]))
+        mean_q = float(values.mean()) if name == "discharge" else None
+        if name == "discharge" and discharge_transform != "symmetric":
+            if mean_q <= 0:
+                raise ValueError("discharge: mean flow must be positive")
+            increments = np.diff(values)
+            if discharge_transform == "mean-scaled":
+                increments = increments / mean_q
+        else:
+            increments = (np.log(values[1:] / values[:-1]) if use_log else
+                          2 * (values[1:] - values[:-1]) / (values[1:] + values[:-1]))
         x = increments[valid]
         if len(x) < 3:
             raise ValueError(f"{name}: too few consecutive observations")
         datasets[name] = {"x": x, "raw_n": len(frame), "n_gaps": int((~valid).sum()),
-                          "first": str(frame.index.min()), "last": str(frame.index.max())}
+                          "first": str(frame.index.min()), "last": str(frame.index.max()),
+                          "transform": (discharge_transform if name == "discharge" else
+                                        "log-return" if use_log else "symmetric"),
+                          "mean_q": mean_q}
     return datasets
 
 
@@ -76,18 +90,22 @@ def _negative_log_likelihood(x, b, q, mu):
     return -len(x) * log_a + np.log1p((q - 1) * b * (x - mu) ** 2).sum() / (q - 1)
 
 
-def _qlog_fit(counts, edges, centers, heights, sigma, q_grid):
-    """Weighted ln_q density versus (1,x,x²), then choose q by Pearson score.
+def _qlog_fit(counts, edges, centers, heights, sigma, q_grid, centered=True):
+    """Regress ln_q density on (1,x²), or (1,x,x²) for historical free mu.
 
     The intercept is fitted freely; the slope is mapped to b using normalized
     q-Gaussian amplitude. Bin-center approximation can be poor in sparse tails.
     """
+    grid = np.asarray(q_grid, dtype=float)
+    if grid.ndim != 1 or not len(grid) or not np.all(np.isfinite(grid)) or np.any((grid <= 1) | (grid >= 3)):
+        raise ValueError("q_grid must contain finite values strictly between 1 and 3")
     scale = max(float(np.std(centers)), 1e-10)
     xx = centers / scale
-    design = np.column_stack((np.ones(len(xx)), xx, xx * xx))
+    design = (np.column_stack((np.ones(len(xx)), xx * xx)) if centered else
+              np.column_stack((np.ones(len(xx)), xx, xx * xx)))
     log_y = np.log(heights)
     candidates = []
-    for q in q_grid:
+    for q in grid:
         with np.errstate(over="ignore", invalid="ignore"):
             response = np.expm1((1 - q) * log_y) / (1 - q)
             log_weight = q * log_y - np.log(sigma)
@@ -95,12 +113,13 @@ def _qlog_fit(counts, edges, centers, heights, sigma, q_grid):
             continue
         weight = np.exp(log_weight - log_weight.max())
         coef, _, rank, _ = np.linalg.lstsq(design * weight[:, None], response * weight, rcond=None)
-        if rank != 3 or coef[2] >= 0:
+        if rank != design.shape[1] or coef[-1] >= 0:
             continue
-        mu = -coef[1] * scale / (2 * coef[2])
-        slope = coef[2] / scale**2
+        mu = 0.0 if centered else -coef[1] * scale / (2 * coef[2])
+        slope = coef[-1] / scale**2
         log_b = 2 * (np.log(-slope) - (1 - q) * np.log(q_gaussian_norm(1, q))) / (3 - q)
-        if not np.isfinite(log_b) or not -20 < log_b < 20 or not edges[0] < mu < edges[-1]:
+        if not np.isfinite(log_b) or not -20 < log_b < 20 or (
+                not centered and not edges[0] < mu < edges[-1]):
             continue
         b = np.exp(log_b)
         expected = counts.sum() * np.diff(q_gaussian_cdf(edges, b, q, mu))
@@ -114,30 +133,49 @@ def _qlog_fit(counts, edges, centers, heights, sigma, q_grid):
                         "q selected by Pearson histogram score")
 
 
-def fit_histogram(x, bins=50, method="pdf", q_grid=Q_GRID):
-    """Fit PDF or q-log with b>0, 1<q<3 and free location mu."""
+def fit_histogram(x, bins=50, method="pdf", q_grid=Q_GRID, *,
+                  centered=True, weighting="uniform"):
+    """Fit PDF/q-log with paper defaults; weighting refers to PDF errors.
+
+    Q-log propagates uniform PDF errors: its squared regression weights are
+    density**(2*q). It still selects q by Pearson expected-count discrepancies.
+    """
     x = np.asarray(x, dtype=float)
+    if x.ndim != 1 or len(x) < 3 or not np.all(np.isfinite(x)) or np.ptp(x) == 0:
+        raise ValueError("x must be a finite nonconstant one-dimensional sample")
+    if weighting not in {"uniform", "poisson"}:
+        raise ValueError("weighting must be uniform or poisson")
     counts, edges, centers, heights, sigma = histogram(x, bins)
+    errors = np.ones_like(sigma) if weighting == "uniform" else sigma
     if method == "qlog":
-        return _qlog_fit(counts, edges, centers, heights, sigma, q_grid)
+        return _qlog_fit(counts, edges, centers, heights, errors, q_grid, centered)
     if method != "pdf":
         raise ValueError("Histogram method must be pdf or qlog")
     sd = np.std(x, ddof=1)
     try:
-        parameters, _ = curve_fit(
-            q_gaussian, centers, heights, p0=(1 / (2 * sd**2), 1.3, np.median(x)),
-            sigma=sigma, absolute_sigma=True,
-            bounds=([1e-10, 1.0001, -np.inf], [np.inf, 2.9999, np.inf]), maxfev=30000)
-        b, q, mu = map(float, parameters)
-        score = float(np.sum(((heights - q_gaussian(centers, b, q, mu)) / sigma)**2))
-        return EmpiricalFit("pdf", b, q, mu, True, score, "weighted PDF least squares")
+        model = (lambda v, b, q: q_gaussian(v, b, q, 0.0)) if centered else q_gaussian
+        # Extreme heavy-tailed samples can make the variance-based starting
+        # b smaller than the optimizer's lower bound. Keep the start feasible.
+        b0 = max(1 / (2 * sd**2), 1.01e-10)
+        p0 = (b0, 1.3) + (() if centered else (np.median(x),))
+        bounds = (([1e-10, 1.0001], [np.inf, 2.9999]) if centered else
+                  ([1e-10, 1.0001, -np.inf], [np.inf, 2.9999, np.inf]))
+        parameters, _ = curve_fit(model, centers, heights, p0=p0,
+            sigma=None if weighting == "uniform" else sigma,
+            absolute_sigma=True, bounds=bounds, maxfev=30000)
+        b, q = map(float, parameters[:2])
+        mu = 0.0 if centered else float(parameters[2])
+        score = float(np.sum(((heights - q_gaussian(centers, b, q, mu)) / errors)**2))
+        return EmpiricalFit("pdf", b, q, mu, True, score, f"{weighting} PDF least squares")
     except (ValueError, RuntimeError, FloatingPointError) as error:
         return EmpiricalFit("pdf", message=str(error))
 
 
-def fit_unbinned(x, method):
+def fit_unbinned(x, method, *, centered=True):
     """Fit MLE or empirical CDF on observations without using bins."""
     x = np.asarray(x, dtype=float)
+    if x.ndim != 1 or len(x) < 3 or not np.all(np.isfinite(x)):
+        raise ValueError("x must be a finite one-dimensional sample")
     if method not in ("mle", "cdf"):
         raise ValueError("Unbinned method must be mle or cdf")
     sd = np.std(x, ddof=1)
@@ -148,7 +186,8 @@ def fit_unbinned(x, method):
     target = (np.arange(len(x)) + .5) / len(x) if method == "cdf" else None
 
     def objective(theta):
-        b, q, mu = np.exp(theta[0]), theta[1], theta[2]
+        b, q = np.exp(theta[0]), theta[1]
+        mu = 0.0 if centered else theta[2]
         if method == "mle":
             return _negative_log_likelihood(x, b, q, mu)
         return np.mean((q_gaussian_cdf(sorted_x, b, q, mu) - target)**2)
@@ -156,6 +195,9 @@ def fit_unbinned(x, method):
     log_b = np.log(1 / (2 * sd**2))
     starts = ((log_b, 1.5, med), (log_b, 2.4, med), (log_b + np.log(4), 1.8, med))
     bounds = ((np.log(1e-8), np.log(1e9)), (1.001, 2.99), (float(x.min()), float(x.max())))
+    if centered:
+        starts = tuple(start[:2] for start in starts)
+        bounds = bounds[:2]
     trials = [minimize(objective, start, bounds=bounds, method="L-BFGS-B",
                        options={"maxiter": 350, "ftol": 1e-12}) for start in starts]
     valid = [trial for trial in trials if trial.success and np.isfinite(trial.fun)]
@@ -163,7 +205,7 @@ def fit_unbinned(x, method):
         return EmpiricalFit(method, message="optimization failed")
     best = min(valid, key=lambda trial: trial.fun)
     return EmpiricalFit(method, float(np.exp(best.x[0])), float(best.x[1]),
-                        float(best.x[2]), True, float(best.fun), str(best.message))
+                        0.0 if centered else float(best.x[2]), True, float(best.fun), str(best.message))
 
 
 def diagnostics(x, result, bins=50):

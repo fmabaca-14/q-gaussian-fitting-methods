@@ -1,31 +1,65 @@
 # q-gaussian-fitting-methods
 Comparison of q-Gaussian parameter estimation methods in complex systems
 
-## Comparación gaussiana y q-Gaussiana
+## Protocolo principal del paper (octubre de 2026)
 
-`src/gaussian.py` ofrece `fit_gaussian_cdf(x)` con mu libre y sigma positiva.
-La comparación usa ajuste CDF para ambos modelos, con el mismo objetivo de
-error cuadrático frente a la CDF empírica de puntos medios. Para generar la
-figura con los tres datasets desde PowerShell:
+Los cuatro métodos usan una q-Gaussiana normalizada con **mu=0**. No se resta
+la media ni la mediana de las muestras y no se aplica suavizado adicional.
+Las nuevas corridas empíricas y sintéticas comparten los estimadores de
+`src/empirical.py`; `src/estimators.py` conserva una interfaz compatible para
+Monte Carlo y el protocolo anterior mediante `protocol="legacy"`.
+
+- Viento solar: `2*(np[t+1]-np[t])/(np[t+1]+np[t])`, lag de una hora.
+- Bitcoin: `log(close[t+1]/close[t])`, lag de un día.
+- Caudal: `(Q[t+1]-Q[t])/mean(Q)`, lag de un día. La media se calcula sobre
+  todas las observaciones limpias del archivo, antes de excluir pares con huecos.
+- Se excluyen pares que cruzan tiempos faltantes.
+- PDF directo: mínimos cuadrados de densidades con pesos uniformes, sobre
+  bins ocupados de un histograma de ancho uniforme y rango completo.
+- Q-log: método original con intercepto libre, ahora regresión contra `1,x²`.
+  Usa errores uniformes en la PDF, propagados a `ln_q`: los pesos de los
+  residuos cuadrados son `density**(2*q)`. No usa sigma Poisson en la regresión.
+  Deriva b de la pendiente y la normalización, y selecciona q en la grilla
+  1.02–2.98 (paso 0.01) minimizando **Pearson** sobre todos los bins.
+  No es el estimador experimental que selecciona por SSE transformada.
+- MLE y CDF: optimización con dos parámetros libres, b y q; mu queda fijado.
+
+Los diagnósticos Poisson (`chi2_hist`) permanecen como medidas descriptivas:
+son sumas totales, no chi-cuadrados reducidos ni tests calibrados para series
+correlacionadas. Pesos uniformes en la PDF no implican pesos uniformes en
+q-log ni igual importancia del cuerpo y las colas. Ningún cambio introduce
+intervalos de confianza iid por defecto.
+
+Controles históricos explícitos: `fit_histogram(..., centered=False,
+weighting="poisson")`, `fit_unbinned(..., centered=False)`,
+`fit_gaussian_cdf(..., centered=False)` y
+`load_increments(..., discharge_transform="symmetric")`.
+Los resultados previos guardados no fueron recalculados y no deben mezclarse
+con las nuevas salidas `results/paper_*`.
+
+## Comparación gaussiana y q-Gaussiana para una columna
+
+Ambos modelos se ajustan mediante el mismo objetivo CDF de puntos medios,
+con mu=0. El histograma de 100 bins solo se utiliza para visualizar la PDF y
+calcular R² en todos sus centros, incluidos los bins vacíos.
 
 ```powershell
 $data = "data/raw"
 python -m scripts.compare_gaussian_qgaussian --solar "$data/1980-2024 np.txt" --bitcoin "$data/Bitcoin_15_10_2013-14_12_2013_historical_data_coinmarketcap.xls" --discharge "$data/daily-data-mean.xls" --bins 100
 ```
 
-Escribe `results/gaussian_comparison/gaussian_vs_qgaussian.png` y `fits.csv`.
-La figura muestra densidades en escala logarítmica y las únicas estadísticas
-anotadas son R² y q. Ambos R² usan todos los centros del mismo histograma de
-100 bins (o el número indicado por `--bins`), aunque ambos modelos se ajustan
-sin bins. Se muestra todo el rango observado. Un R² mayor describe ese
-histograma; no demuestra que CDF sea el mejor estimador ni constituye un test
-de selección de modelos.
+Genera tres figuras individuales en `results/paper_gaussian_comparison/`:
+`solar_gaussian_comparison`, `bitcoin_gaussian_comparison` y
+`discharge_gaussian_comparison`, cada una en PDF vectorial y PNG a 600 dpi.
+Tamaño exacto 85 × 70 mm; ejes 9 pt, ticks/leyenda 8 pt; leyenda interior;
+q-Gaussiana azul continua y Gaussiana naranja discontinua; ordenada logarítmica.
+No se recorta el tamaño físico al exportar. `fits.csv`, `provenance.json` y
+`captions.tex` registran resultados, tratamientos, tamaños y pies de figura.
+Las únicas estadísticas anotadas en las curvas son q y R².
 
-Por defecto se conserva el incremento simétrico del caudal utilizado por
-`load_increments`. Agregá `--discharge-transform difference` para usar
-Q[t+1]-Q[t], o `--discharge-transform mean-scaled` para dividir esa diferencia
-por el caudal medio. Se omiten pares que cruzan días faltantes. El CSV registra
-la transformación elegida; evitá comparar resultados con tratamientos distintos.
+Para controles, `--free-mu` permite mu libre y `--discharge-transform
+symmetric` o `difference` permiten otras definiciones del caudal. Cambiar
+`--output-dir` para separar esas corridas del análisis principal.
 
 ## Series reales
 
@@ -62,7 +96,7 @@ abarcan 1980–2024, 2012–2026 y 2016–2026 respectivamente; el nombre del
 archivo de Bitcoin no describe su intervalo real. Si se usan para inferencia,
 definir después los incrementos, lagunas y posibles dependencias temporales.
 
-## Piloto sintético centrado
+## Piloto sintético centrado — nuevas corridas con protocolo del paper
 
 Desde la raíz del repositorio, en el terminal de VS Code con el entorno
 Python activado y `numpy`/`scipy` instalados:
@@ -71,9 +105,9 @@ Python activado y `numpy`/`scipy` instalados:
 python -m scripts.run_pilot --repetitions 100
 ```
 
-Se generan `results/pilot_v2_detail.csv` (2 400 ajustes),
-`results/pilot_v2_summary.csv` (24 filas, una por escenario y método)
-y `results/pilot_v2.json` (parámetros y versiones). Para una prueba rápida,
+Se generan `results/paper_pilot_detail.csv` (2 400 ajustes),
+`results/paper_pilot_summary.csv` (24 filas, una por escenario y método)
+y `results/paper_pilot.json` (parámetros y versiones). Para una prueba rápida,
 usar `--repetitions 2`. El código del primer piloto sigue disponible en el
 historial Git; sus archivos `results/pilot.csv` y `results/pilot.json` se
 conservan como referencia. Véase `results/README.md` para limitaciones.
@@ -87,40 +121,24 @@ python -m scripts.bins_sensitivity
 Genera 10 muestras por escenario con q=1.5/1.9, b=2/5 y N=1000/5000.
 Cada muestra se ajusta con 20, 30, 40, 50, 70, 100, 150 y 200 bins,
 compartiendo los datos entre PDF y q-log. Los resultados estan en
-`results/bins_sensitivity/`: `detail.csv`, `summary.csv`, `config.json`
+`results/paper_bins_sensitivity/`: `detail.csv`, `summary.csv`, `config.json`
 y la figura `q_vs_bins.png`. Consultar el README de esa carpeta para
 interpretar la figura y los limites de este experimento exploratorio.
 
 Para la extension con 20 corridas y 10, 20, ..., 200 bins:
 
 ```powershell
-python -m scripts.bins_sensitivity --repetitions 20 --bins-start 10 --bins-stop 200 --bins-step 10 --output-dir results/bins_sensitivity_20
+python -m scripts.bins_sensitivity --repetitions 20 --bins-start 10 --bins-stop 200 --bins-step 10 --output-dir results/paper_bins_sensitivity_20
 ```
 
-Esta corrida se guarda aparte en `results/bins_sensitivity_20/`.
+Esta corrida se guarda aparte en `results/paper_bins_sensitivity_20/`.
 
-## Ajustes empíricos con ubicación libre
+## Ajustes empíricos centrados
 
-Los análisis siguientes están separados del piloto sintético centrado de
-`src/estimators.py`. Usan `src/real_data.py` para leer los archivos y
-`src/distributions.py` para PDF/CDF normalizadas. En `src/empirical.py`,
-las variables ajustadas son, sin recentrado ni cambio de escala:
-
-- Viento solar: `2*(np[t+1]-np[t])/(np[t+1]+np[t])`, entre horas consecutivas.
-- Bitcoin: `log(close[t+1]/close[t])`, entre días consecutivos.
-- Caudal: `2*(Q[t+1]-Q[t])/(Q[t+1]+Q[t])`, entre días consecutivos.
-
-Se excluyen los pares que cruzan huecos de tiempo después de la limpieza de
-datos. Los parámetros `b`, `q` y `mu` son libres, con `b>0` y `1<q<3`.
-El ajuste directo reproduce el histograma de **ancho uniforme** en todo el
-rango, omite bins vacíos y pondera las densidades con
-`sqrt(count)/(N*width)`. MLE optimiza la log-verosimilitud individual; CDF
-minimiza el error cuadrático frente a la CDF empírica. Q-log recorre q con
-paso 0.01, ajusta `ln_q(density)` frente a `1, x, x²`, deriva `mu` del
-vértice y `b` de la pendiente y la normalización; selecciona el candidato
-por un score de Pearson sobre todos los conteos. Los bins amplios en colas
-hacen que la aproximación en centros de bin del q-log sea especialmente
-frágil. Estos cuatro métodos optimizan **objetivos diferentes**.
+Los siguientes comandos usan el protocolo principal descrito arriba:
+mu=0, caudal mean-scaled y errores uniformes en las regresiones PDF/q-log.
+Los cuatro métodos optimizan objetivos diferentes. La aproximación de una
+PDF por su valor en el centro puede ser frágil en bins muy amplios.
 
 Desde la raíz del repositorio, con los tres archivos en `data/raw/`:
 
@@ -130,8 +148,8 @@ python -m scripts.compare_real_methods --solar "$data/1980-2024 np.txt" --bitcoi
 python -m scripts.real_bins_sensitivity --solar "$data/1980-2024 np.txt" --bitcoin "$data/Bitcoin_15_10_2013-14_12_2013_historical_data_coinmarketcap.xls" --discharge "$data/daily-data-mean.xls" --bins-start 10 --bins-stop 200 --bins-step 5
 ```
 
-El primer comando escribe `results/empirical_50/fits.csv` y `fits.png`.
-El segundo escribe `results/empirical_bins/detail.csv`, `summary.csv`,
+El primer comando escribe `results/paper_empirical_50/fits.csv` y `fits.png`.
+El segundo escribe `results/paper_empirical_bins/detail.csv`, `summary.csv`,
 `references.csv` y `q_vs_bins.png`. `detail.csv` incluye `b`, `q`, `mu`,
 bins ocupados, estado y objetivo para cada combinación. MLE y CDF se
 calculan una vez por dataset y figuran como referencias independientes de
@@ -142,8 +160,8 @@ horizontal, pero los ajustes usan **todos** los incrementos y el histograma
 completo. `r2_hist`, `chi2_hist` y `cdf_max_abs` son diagnósticos descriptivos:
 los errores Poisson y las comparaciones no corrigen dependencia temporal.
 La desviación de q a través de distintos números de bins tampoco es un
-intervalo de confianza. La variable simétrica de caudal pertenece a `(-2,2)`;
-la q-Gaussiana normalizada asigna probabilidad fuera de ese soporte.
+intervalo de confianza. El caudal mean-scaled ya no tiene la cota artificial `(-2,2)`; esto no
+garantiza que el modelo centrado reproduzca su asimetría o las colas.
 
 Para generar dos figuras individuales por dataset usando 100 bins para el
 histograma, PDF directo y q-log (MLE/CDF siguen sin bins):
@@ -152,7 +170,7 @@ histograma, PDF directo y q-log (MLE/CDF siguen sin bins):
 python -m scripts.plot_empirical_fits --solar "$data/1980-2024 np.txt" --bitcoin "$data/Bitcoin_15_10_2013-14_12_2013_historical_data_coinmarketcap.xls" --discharge "$data/daily-data-mean.xls" --bins 100
 ```
 
-`results/empirical_figures/` contendrá `solar_body.png`, `solar_tails.png`,
+`results/paper_empirical_figures/` contendrá `solar_body.png`, `solar_tails.png`,
 `bitcoin_body.png`, `bitcoin_tails.png`, `discharge_body.png` y
 `discharge_tails.png`. La figura del cuerpo usa escala lineal y muestra el
 intervalo de los percentiles 1–99 para apreciar el pico. La figura de las
@@ -172,7 +190,7 @@ $data = "data/raw"
 python -m scripts.evaluate_real_methods --solar "$data/1980-2024 np.txt" --bitcoin "$data/Bitcoin_15_10_2013-14_12_2013_historical_data_coinmarketcap.xls" --discharge "$data/daily-data-mean.xls"
 ```
 
-En `results/empirical_scores/` se generan `global_evaluation.csv` (18 filas),
+En `results/paper_empirical_scores/` se generan `global_evaluation.csv` (18 filas),
 `tail_threshold_errors.csv` (6 umbrales por ajuste), `tail_summary.csv`,
 `exceedance_curves.csv`, `exceedance_curves.png` y `config.json`. PDF y q-log
 se ajustan con 50 y 100 bins; MLE y CDF, una vez por dataset. Todos se evalúan
@@ -196,8 +214,9 @@ elección del histograma y no tiene unidades probabilísticas.
 ## Variante q-log centrada con selección por error ponderado
 
 **Estado del análisis empírico (30/09/2026):** se mantiene el q-log original
-de `src/empirical.py`, con `mu` libre y selección por Pearson, como método
-principal de la comparación. La variante centrada se conserva como
+de `src/empirical.py`, entonces con `mu` libre y selección por Pearson.
+Desde octubre, el principal conserva Pearson pero fija `mu=0` y usa errores
+uniformes en la PDF. La variante de SSE transformada se conserva como
 implementación experimental para estudiar sus diferencias.
 
 La comparación con los tres datasets y el barrido de 10 a 200 bins, en pasos
@@ -224,7 +243,8 @@ de confianza.
 `src/qlog_variants.py` agrega `fit_centered_qlog`: impone `mu=0` sin restar la
 media a las observaciones, ajusta `ln_q(density)` frente a `1,x²` y selecciona
 q por el menor `sum((residual/sigma_lnq)²)` en la grilla. Usa los mismos bins
-uniformes y errores Poisson que el ajuste empírico existente. Ejemplo:
+uniformes y conserva errores Poisson propios del experimento histórico;
+no sigue los pesos del protocolo principal actual. Ejemplo:
 
 ```python
 import pandas as pd
@@ -238,7 +258,7 @@ datasets = load_increments(
     "data/raw/daily-data-mean.xls",
 )
 x = datasets["bitcoin"]["x"]
-original = fit_histogram(x, bins=100, method="qlog")
+original = fit_histogram(x, bins=100, method="qlog", centered=False, weighting="poisson")
 centered, scan = fit_centered_qlog(x, bins=100, return_scan=True)
 scan_table = pd.DataFrame(scan)
 thresholds = tail_thresholds(x)
@@ -257,3 +277,17 @@ transformación cambian con q; el mínimo entre valores de q es un criterio
 experimental y no garantiza el mejor ajuste de las colas. Esta comparación
 cambia tanto la ubicación como el criterio de selección respecto del q-log
 original, por lo que no permite atribuir diferencias a un solo factor.
+
+## Reproducción del protocolo sintético anterior
+
+`--protocol legacy` en `scripts.run_pilot` y `scripts.bins_sensitivity` conserva
+el estimador agrupado por deviance y el histograma con bins de cola variables.
+Para reproducir exactamente una corrida antigua, recuperar además su grilla q
+y configuración en el commit correspondiente. Las nuevas corridas usan el
+protocolo del paper por defecto y tienen otras rutas de salida.
+
+La comprobación de ejecución sintética con una muestra por escenario es
+solamente un control computacional, no una nueva validación Monte Carlo.
+Con colas muy pesadas y histogramas de rango completo pueden quedar pocos
+bins ocupados y q-log no producir candidatos válidos: las fallas deben
+reportarse y no excluirse silenciosamente de la validación.

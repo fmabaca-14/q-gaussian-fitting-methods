@@ -14,11 +14,11 @@ from src.empirical import METHODS, diagnostics, fit_histogram, fit_unbinned, his
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Four free-location q-Gaussian fits on real increments")
+    parser = argparse.ArgumentParser(description="Four centered q-Gaussian fits on real increments")
     for name in ("solar", "bitcoin", "discharge"):
         parser.add_argument(f"--{name}", required=True)
     parser.add_argument("--bins", type=int, default=50)
-    parser.add_argument("--output-dir", type=Path, default=Path("results/empirical_50"))
+    parser.add_argument("--output-dir", type=Path, default=Path("results/paper_empirical_50"))
     args = parser.parse_args(argv)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     datasets = load_increments(args.solar, args.bitcoin, args.discharge)
@@ -36,6 +36,7 @@ def main(argv=None):
                       else fit_unbinned(x, method))
             rows.append({"dataset": name, "n_raw": data["raw_n"], "n_increments": len(x),
                          "n_gaps": data["n_gaps"], "first": data["first"], "last": data["last"],
+                         "transform": data["transform"], "mean_q": data["mean_q"],
                          "bins": args.bins, "occupied_bins": int((counts > 0).sum()),
                          **asdict(result), **diagnostics(x, result, args.bins)})
             if result.success:

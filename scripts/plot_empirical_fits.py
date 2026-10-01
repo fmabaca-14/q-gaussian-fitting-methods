@@ -1,4 +1,4 @@
-"""Make per-dataset body PDF and two-sided tail figures for four free-mu fits.
+"""Make per-dataset body PDF and two-sided tail figures for four centered fits.
 
 Run from the repository root with the original three --solar/--bitcoin/--discharge
 files. PDF and q-log use --bins (100 by default); MLE/CDF use all observations.
@@ -118,7 +118,7 @@ def main(argv=None):
     for name in ("solar", "bitcoin", "discharge"):
         parser.add_argument(f"--{name}", required=True)
     parser.add_argument("--bins", type=int, default=100)
-    parser.add_argument("--output-dir", type=Path, default=Path("results/empirical_figures"))
+    parser.add_argument("--output-dir", type=Path, default=Path("results/paper_empirical_figures"))
     args = parser.parse_args(argv)
     if args.bins < 10:
         parser.error("--bins must be at least 10")
