@@ -76,12 +76,20 @@ def _negative_log_likelihood(x, b, q, mu):
     return -len(x) * log_a + np.log1p((q - 1) * b * (x - mu) ** 2).sum() / (q - 1)
 
 
-def _qlog_fit(counts, edges, centers, heights, sigma, q_grid):
-    """Weighted ln_q density versus (1,x,x²), then choose q by Pearson score.
+def _qlog_fit(counts, edges, centers, heights, sigma, q_grid, selection="regression"):
+    """Fit weighted ln_q density against (1,x,x²) across the q grid.
+
+    By default choose the minimum unscaled weighted regression SSE, THEN
+    recover b. `pearson_counts` retains the previous count-space selection.
 
     The intercept is fitted freely; the slope is mapped to b using normalized
     q-Gaussian amplitude. Bin-center approximation can be poor in sparse tails.
     """
+    if selection not in ("regression", "pearson_counts"):
+        raise ValueError("qlog_selection must be regression or pearson_counts")
+    q_grid = np.asarray(q_grid, dtype=float)
+    if q_grid.ndim != 1 or not len(q_grid) or not np.all(np.isfinite(q_grid)) or np.any((q_grid <= 1) | (q_grid >= 3)):
+        raise ValueError("q_grid must contain finite values strictly between 1 and 3")
     scale = max(float(np.std(centers)), 1e-10)
     xx = centers / scale
     design = np.column_stack((np.ones(len(xx)), xx, xx * xx))
@@ -99,6 +107,17 @@ def _qlog_fit(counts, edges, centers, heights, sigma, q_grid):
             continue
         mu = -coef[1] * scale / (2 * coef[2])
         slope = coef[2] / scale**2
+        if not edges[0] < mu < edges[-1]:
+            continue
+        if selection == "regression":
+            # The rescaling of weights conditions the solve only. Compare
+            # scores with the original sigma_lnq for every q.
+            with np.errstate(over="ignore", invalid="ignore"):
+                residual = (response - design @ coef) * np.exp(log_weight)
+                score = float(np.sum(residual**2))
+            if np.isfinite(score):
+                candidates.append((score, float(slope), float(q), float(mu)))
+            continue
         log_b = 2 * (np.log(-slope) - (1 - q) * np.log(q_gaussian_norm(1, q))) / (3 - q)
         if not np.isfinite(log_b) or not -20 < log_b < 20 or not edges[0] < mu < edges[-1]:
             continue
@@ -109,17 +128,33 @@ def _qlog_fit(counts, edges, centers, heights, sigma, q_grid):
             candidates.append((float(score), float(b), float(q), float(mu)))
     if not candidates:
         return EmpiricalFit("qlog", message="no valid q-log candidate")
-    score, b, q, mu = min(candidates)
+    score, value, q, mu = min(candidates)
+    if selection == "regression":
+        slope = value
+        log_b = 2 * (np.log(-slope) - (1-q)*np.log(q_gaussian_norm(1, q))) / (3-q)
+        with np.errstate(over="ignore", under="ignore"):
+            b = float(np.exp(log_b))
+        if not np.isfinite(b) or b <= 0:
+            return EmpiricalFit("qlog", q=q, mu=mu, objective=score,
+                                message="best regression candidate has nonrepresentable b")
+        message = "q selected by weighted q-log regression SSE; b recovered afterwards"
+    else:
+        b = value
+        message = "q selected by Pearson histogram score (legacy)"
     return EmpiricalFit("qlog", b, q, mu, True, score,
-                        "q selected by Pearson histogram score")
+                        message)
 
 
-def fit_histogram(x, bins=50, method="pdf", q_grid=Q_GRID):
-    """Fit PDF or q-log with b>0, 1<q<3 and free location mu."""
+def fit_histogram(x, bins=50, method="pdf", q_grid=Q_GRID, *, qlog_selection="regression"):
+    """Fit PDF or q-log with b>0, 1<q<3 and free location mu.
+
+    qlog_selection='regression' minimizes the weighted transformed SSE.
+    'pearson_counts' reproduces the earlier implementation for comparison.
+    """
     x = np.asarray(x, dtype=float)
     counts, edges, centers, heights, sigma = histogram(x, bins)
     if method == "qlog":
-        return _qlog_fit(counts, edges, centers, heights, sigma, q_grid)
+        return _qlog_fit(counts, edges, centers, heights, sigma, q_grid, qlog_selection)
     if method != "pdf":
         raise ValueError("Histogram method must be pdf or qlog")
     sd = np.std(x, ddof=1)
