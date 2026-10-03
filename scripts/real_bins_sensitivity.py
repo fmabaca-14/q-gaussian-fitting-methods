@@ -13,13 +13,13 @@ from src.empirical import fit_histogram, fit_unbinned, histogram, load_increment
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Free-location empirical PDF and q-log bin sensitivity")
+    parser = argparse.ArgumentParser(description="Centered empirical PDF and q-log bin sensitivity")
     for name in ("solar", "bitcoin", "discharge"):
         parser.add_argument(f"--{name}", required=True)
     parser.add_argument("--bins-start", type=int, default=10)
     parser.add_argument("--bins-stop", type=int, default=200)
     parser.add_argument("--bins-step", type=int, default=5)
-    parser.add_argument("--output-dir", type=Path, default=Path("results/empirical_bins"))
+    parser.add_argument("--output-dir", type=Path, default=Path("results/paper_empirical_bins"))
     args = parser.parse_args(argv)
     if args.bins_start < 4 or args.bins_step <= 0 or args.bins_stop < args.bins_start:
         parser.error("Invalid bin range")
@@ -32,13 +32,15 @@ def main(argv=None):
         x = data["x"]
         references = {method: fit_unbinned(x, method) for method in ("mle", "cdf")}
         for method, result in references.items():
-            refs.append({"dataset": name, "n_increments": len(x), **asdict(result)})
+            refs.append({"dataset": name, "n_increments": len(x), "transform": data["transform"],
+                         "mean_q": data["mean_q"], **asdict(result)})
         for bins in range(args.bins_start, args.bins_stop + 1, args.bins_step):
             counts, *_ = histogram(x, bins)
             for method in ("pdf", "qlog"):
                 result = fit_histogram(x, bins, method)
                 rows.append({"dataset": name, "n_increments": len(x),
-                             "n_gaps": data["n_gaps"], "bins": bins,
+                             "n_gaps": data["n_gaps"], "transform": data["transform"],
+                             "mean_q": data["mean_q"], "bins": bins,
                              "occupied_bins": int(np.count_nonzero(counts)),
                              "empty_bins": int(np.count_nonzero(counts == 0)), **asdict(result)})
         for method, color in (("pdf", "#d54b40"), ("qlog", "#7854ab")):

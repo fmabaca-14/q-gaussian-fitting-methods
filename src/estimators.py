@@ -1,4 +1,8 @@
-"""Estimadores exploratorios para la q-Gaussiana normalizada con mu=0.
+"""Synthetic interface to paper estimators, with an explicit legacy protocol.
+
+The default paper protocol delegates to empirical.py: equal-width histograms,
+uniform PDF errors, fixed mu=0 and Pearson q-log selection. The implementations
+below are retained solely for reproducing the historical synthetic pilot.
 
 PDF: verosimilitud multinomial de conteos en bins; usa todos los datos.
 MLE: verosimilitud de cada observacion sin agrupar.
@@ -21,7 +25,7 @@ from .distributions import q_gaussian_cdf, q_gaussian_norm
 Q_BOUNDS = (1.01, 2.99)
 B_BOUNDS = (0.01, 50.0)
 STARTS = ((1.4, 2.0), (2.4, 2.0))
-DEFAULT_Q_GRID = np.linspace(1.02, 2.98, 99)
+DEFAULT_Q_GRID = np.linspace(1.02, 2.98, 197)
 
 
 @dataclass
@@ -36,13 +40,18 @@ class Fit:
     at_bound: bool = False
 
 
-def histogram(data, bins=50):
-    """Bins simetricos; todos los valores pertenecen a algun bin.
+def histogram(data, bins=50, *, protocol="paper"):
+    """Paper: full-range equal-width bins, shared with empirical estimators.
 
-    El 80 % de los bins cubre [-r,r], r=percentil 90 de |x|. El resto
+    Legacy only: symmetric tail-aware bins. El 80 % de los bins cubre [-r,r], r=percentil 90 de |x|. El resto
     crece geometricamente hasta el maximo observado. La division central
     no depende de la posicion de la observacion mas extrema.
     """
+    if protocol == "paper":
+        counts, edges = np.histogram(data, bins=bins)
+        return edges, counts
+    if protocol != "legacy":
+        raise ValueError("protocol must be paper or legacy")
     if bins < 10 or bins % 10:
         raise ValueError("bins debe ser multiplo de 10 y >= 10")
     absx = np.abs(data)
@@ -123,14 +132,32 @@ def _qlog_fit(edges, counts, q_grid):
     return best
 
 
-def fit(data, method, bins=50, q_grid=DEFAULT_Q_GRID, hist=None):
+def fit(data, method, bins=50, q_grid=DEFAULT_Q_GRID, hist=None, *, protocol="paper"):
     """Ajusta q,b con mu=0. `hist` permite compartir bins entre PDF y QLOG."""
     x = np.asarray(data, dtype=float)
     if x.ndim != 1 or len(x) < 3 or not np.all(np.isfinite(x)):
         raise ValueError("datos deben ser finitos y unidimensionales")
     if method not in {"pdf", "mle", "qlog", "cdf"}:
         raise ValueError("metodo desconocido")
-    edges, counts = hist if hist is not None else histogram(x, bins)
+    if protocol == "paper":
+        from .empirical import fit_histogram, fit_unbinned
+        edges, counts = histogram(x, bins)
+        if hist is not None and (not np.array_equal(hist[0], edges) or not np.array_equal(hist[1], counts)):
+            raise ValueError("paper protocol requires the shared equal-width histogram")
+        result = (fit_histogram(x, bins, method, q_grid=q_grid) if method in {"pdf", "qlog"}
+                  else fit_unbinned(x, method))
+        q_lower, q_upper = ((1.0001, 2.9999) if method == "pdf" else (1.001, 2.99))
+        at_bound = bool(result.success and (
+            min(result.q-q_lower, q_upper-result.q) < 1e-4 or
+            (method == "pdf" and result.b <= 1.01e-10) or
+            (method in {"mle", "cdf"} and (result.b <= 1.01e-8 or result.b >= .99e9)) or
+            (method == "qlog" and (np.isclose(result.q, min(q_grid)) or
+                                  np.isclose(result.q, max(q_grid))))))
+        return Fit(result.q, result.b, result.success, result.message, result.objective,
+                   nfev=None, occupied_bins=int(np.count_nonzero(counts)), at_bound=at_bound)
+    if protocol != "legacy":
+        raise ValueError("protocol must be paper or legacy")
+    edges, counts = hist if hist is not None else histogram(x, bins, protocol="legacy")
     occupied = int(np.count_nonzero(counts))
     if method == "qlog":
         return _qlog_fit(edges, counts, q_grid)

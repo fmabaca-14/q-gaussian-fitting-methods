@@ -27,14 +27,15 @@ class EmpiricalTests(unittest.TestCase):
                 scores.append((float(np.sum(((response-design@coef)*weights)**2)), q))
         score, q = min(scores)
         with patch('src.empirical.q_gaussian_cdf', side_effect=AssertionError('CDF must not select q')):
-            result = fit_histogram(x, 50, 'qlog', q_grid=grid)
+            result = fit_histogram(x, 50, 'qlog', q_grid=grid,
+                centered=False, weighting='poisson', qlog_selection='regression')
         self.assertTrue(result.success)
         self.assertEqual(result.q, q)
         self.assertAlmostEqual(result.objective, score, places=7)
 
-    def test_legacy_qlog_selection_is_explicit(self):
+    def test_default_qlog_selection_is_pearson(self):
         x = np.random.default_rng(14).standard_t(5, size=1500)
-        result = fit_histogram(x, 50, 'qlog', q_grid=[1.2,1.5,1.8], qlog_selection='pearson_counts')
+        result = fit_histogram(x, 50, 'qlog', q_grid=[1.2,1.5,1.8])
         self.assertTrue(result.success)
         self.assertIn('Pearson',result.message)
 
@@ -51,7 +52,7 @@ class EmpiricalTests(unittest.TestCase):
                                "2020-01-06T23:59:59.999Z;2\n", encoding="utf-8")
             river.write_text("time,value\n2020-01-01,2\n2020-01-02,4\n"
                              "2020-01-04,8\n2020-01-05,4\n2020-01-06,2\n", encoding="utf-8")
-            data = load_increments(solar, bitcoin, river)
+            data = load_increments(solar, bitcoin, river, discharge_transform='symmetric')
             np.testing.assert_allclose(data["solar"]["x"], [2/3, -2/3, -2/3])
             np.testing.assert_allclose(data["bitcoin"]["x"],
                                        [np.log(2), -np.log(2), -np.log(2)])
@@ -64,8 +65,8 @@ class EmpiricalTests(unittest.TestCase):
         nu = (3-q)/(q-1)
         sample = mu + t.rvs(df=nu, scale=1/np.sqrt(b*(3-q)),
                             size=12000, random_state=rng)
-        direct = fit_histogram(sample, 80, "pdf")
-        qlog = fit_histogram(sample, 80, "qlog", qlog_selection="pearson_counts")
+        direct = fit_histogram(sample, 80, "pdf", centered=False, weighting="poisson")
+        qlog = fit_histogram(sample, 80, "qlog", centered=False, weighting="poisson")
         self.assertTrue(direct.success and qlog.success)
         self.assertLess(abs(direct.mu-mu), 0.08)
         self.assertLess(abs(qlog.mu-mu), 0.12)

@@ -33,6 +33,7 @@ def evaluate_dataset(name, data, bins=(50, 100)):
         fit = fit_histogram(x, count, method) if count is not None else fit_unbinned(x, method)
         base = {"dataset": name, "method": method, "fit_bins": count or "",
                 "n_increments": len(x), "n_raw": data["raw_n"], "n_gaps": data["n_gaps"],
+                "transform": data.get("transform", "unspecified"), "mean_q": data.get("mean_q"),
                 **asdict(fit)}
         if not fit.success:
             body_rows.append({**base, **{key: np.nan for key in
@@ -56,7 +57,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Compare in-sample body and tail scores")
     for name in ("solar", "bitcoin", "discharge"):
         parser.add_argument(f"--{name}", required=True)
-    parser.add_argument("--output-dir", type=Path, default=Path("results/empirical_scores"))
+    parser.add_argument("--output-dir", type=Path, default=Path("results/paper_empirical_scores"))
     args = parser.parse_args(argv)
     datasets = load_increments(args.solar, args.bitcoin, args.discharge)
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -69,7 +70,10 @@ def main(argv=None):
     for filename, rows in zip(("global_evaluation.csv", "tail_threshold_errors.csv",
                                "tail_summary.csv", "exceedance_curves.csv"), all_rows):
         _write_csv(args.output_dir / filename, rows)
-    config = {"body_dic": "mean[(F_model(x_i)-F_n(x_i))^2], right-continuous F_n",
+    config = {"mu_fixed": 0, "sample_centering": False,
+              "pdf_errors": "uniform", "qlog_errors": "uniform PDF errors propagated to ln_q",
+              "qlog_selection": "Pearson expected-count score",
+              "discharge_transform": "mean-scaled", "body_dic": "mean[(F_model(x_i)-F_n(x_i))^2], right-continuous F_n",
               "ks": "max of left- and right-limit CDF differences at sample values",
               "r2_bins": 100, "threshold_percentiles": [1, 5, 10, 90, 95, 99],
               "tail_error": "100*(predicted-observed), left <=u, right >u",

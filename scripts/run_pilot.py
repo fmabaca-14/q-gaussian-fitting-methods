@@ -1,7 +1,7 @@
 """Piloto reproducible: python -m scripts.run_pilot --repetitions 100.
 
-Produce `pilot_v2_detail.csv` (una fila por ajuste), `pilot_v2_summary.csv`
-(una fila por escenario/metodo) y `pilot_v2.json` (configuracion y versiones).
+Produce `paper_pilot_detail.csv` (una fila por ajuste), `paper_pilot_summary.csv`
+(una fila por escenario/metodo) y `paper_pilot.json` (configuracion y versiones).
 """
 import argparse
 import csv
@@ -92,9 +92,10 @@ def write_csv(path, fields, rows):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--repetitions", type=int, default=100)
-    parser.add_argument("--output", type=Path, default=Path("results/pilot_v2_detail.csv"))
+    parser.add_argument("--output", type=Path, default=Path("results/paper_pilot_detail.csv"))
     parser.add_argument("--seed", type=int, default=20260923)
     parser.add_argument("--bins", type=int, default=50)
+    parser.add_argument("--protocol", choices=("paper", "legacy"), default="paper")
     args = parser.parse_args()
     if args.repetitions < 1:
         parser.error("repetitions debe ser positivo")
@@ -103,7 +104,7 @@ def main():
     stem = args.output.with_suffix("")
     summary_stem = (stem.name.replace("_detail", "_summary") if "_detail" in stem.name
                     else stem.name + "_summary")
-    config = dict(q_values=QS, sample_sizes=NS, b=2.0, mu=0.0,
+    config = dict(protocol=args.protocol, q_values=QS, sample_sizes=NS, b=2.0, mu=0.0,
                   repetitions=args.repetitions, seed=args.seed, bins=args.bins,
                   q_grid=list(DEFAULT_Q_GRID), methods=METHODS,
                   python=platform.python_version(), numpy=np.__version__, scipy=scipy.__version__)
@@ -115,10 +116,10 @@ def main():
             # Muestra comun para los cuatro metodos; corrientes independientes.
             rng = np.random.default_rng(np.random.SeedSequence([args.seed, scenario, rep]))
             data = generate(rng, n, q)
-            hist = histogram(data, args.bins)
+            hist = histogram(data, args.bins, protocol=args.protocol)
             for method in METHODS:
                 start = time.perf_counter()
-                result = fit(data, method, bins=args.bins, hist=hist)
+                result = fit(data, method, bins=args.bins, hist=hist, protocol=args.protocol)
                 seconds = time.perf_counter() - start
                 rows.append(dict(q_true=q, b_true=2.0, mu_true=0.0, n=n, rep=rep,
                                  method=method, q_hat=result.q, b_hat=result.b,

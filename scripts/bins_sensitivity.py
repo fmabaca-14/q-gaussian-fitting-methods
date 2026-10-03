@@ -106,10 +106,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--repetitions", type=int, default=10)
     parser.add_argument("--seed", type=int, default=20260926)
-    parser.add_argument("--output-dir", type=Path, default=Path("results/bins_sensitivity"))
+    parser.add_argument("--output-dir", type=Path, default=Path("results/paper_bins_sensitivity"))
     parser.add_argument("--bins-start", type=int)
     parser.add_argument("--bins-stop", type=int)
     parser.add_argument("--bins-step", type=int, default=10)
+    parser.add_argument("--protocol", choices=("paper", "legacy"), default="paper")
     args = parser.parse_args()
     if args.repetitions < 2:
         parser.error("repetitions debe ser al menos 2 para calcular dispersion")
@@ -123,7 +124,7 @@ def main():
             or bins_grid[-1] != (args.bins_stop if args.bins_stop is not None else bins_grid[-1])):
         parser.error("bins deben ser multiplos de 10, desde 10, e incluir el ultimo valor")
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    config = dict(q_values=QS, b_values=BS, sample_sizes=NS, bins=bins_grid,
+    config = dict(protocol=args.protocol, q_values=QS, b_values=BS, sample_sizes=NS, bins=bins_grid,
                   repetitions=args.repetitions, seed=args.seed, mu=0.0,
                   methods=METHODS, qlog_grid=list(DEFAULT_Q_GRID),
                   python=platform.python_version(), numpy=np.__version__,
@@ -140,11 +141,11 @@ def main():
                     data = generate(rng, n, q, b)
                     max_abs_x = float(np.max(np.abs(data)))
                     for bins in bins_grid:
-                        hist = histogram(data, bins)
+                        hist = histogram(data, bins, protocol=args.protocol)
                         assert hist[1].sum() == n
                         for method in METHODS:
                             start = time.perf_counter()
-                            result = fit(data, method, bins=bins, hist=hist)
+                            result = fit(data, method, bins=bins, hist=hist, protocol=args.protocol)
                             rows.append(dict(q_true=q, b_true=b, n=n, rep=rep,
                                              seed="-".join(map(str, seed)), bins=bins,
                                              method=method, q_hat=result.q, b_hat=result.b,
