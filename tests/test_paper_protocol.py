@@ -41,13 +41,45 @@ class PaperProtocolTests(unittest.TestCase):
         direct = fit_histogram(x, 50, "pdf")
         self.assertAlmostEqual(direct.objective,
             np.sum((heights-q_gaussian(centers, direct.b, direct.q))**2), places=12)
-        qlog = fit_histogram(x, 50, "qlog")
+        qlog = fit_histogram(x, 50, "qlog", qlog_selection="pearson_counts")
         expected = len(x)*np.diff(q_gaussian_cdf(edges, qlog.b, qlog.q))
         self.assertAlmostEqual(qlog.objective,
             np.sum((counts-expected)**2/np.maximum(expected, 1e-10)), places=7)
+        qlog = fit_histogram(x, 50, "qlog")
         synthetic = fit(x, "qlog", bins=50, hist=synthetic_histogram(x, 50))
         self.assertEqual(synthetic.q, qlog.q)
         self.assertAlmostEqual(synthetic.b, qlog.b, places=10)
+
+    def test_regression_selection_uses_original_weights_and_not_counts(self):
+        x = np.random.default_rng(14).standard_t(4, size=1500)
+        grid = np.array([1.2, 1.5, 1.8, 2.1])
+        _, _, centers, heights, _ = histogram(x, 40)
+        scores = []
+        # Independent normal equations in unscaled physical coordinates.
+        design = np.column_stack((np.ones(len(centers)), centers**2))
+        for q in grid:
+            z = (heights**(1-q)-1)/(1-q)
+            w = heights**(2*q)
+            coef = np.linalg.solve(design.T @ (w[:,None]*design), design.T @ (w*z))
+            scores.append(np.sum(w*(z-design@coef)**2) if coef[1]<0 else np.inf)
+        from unittest.mock import patch
+        with patch("src.empirical.q_gaussian_cdf", side_effect=AssertionError("count selection used")):
+            result = fit_histogram(x, 40, "qlog", q_grid=grid, qlog_selection="regression")
+        self.assertTrue(result.success)
+        self.assertEqual(result.q, grid[np.argmin(scores)])
+        self.assertAlmostEqual(result.objective, min(scores), places=10)
+
+    def test_qlog_recovers_shape_from_both_coefficients(self):
+        from src.empirical import _qlog_fit
+        edges = np.linspace(-3, 3, 81)
+        centers = (edges[:-1]+edges[1:])/2
+        for centered, mu in [(True, 0.), (False, .3)]:
+            y = q_gaussian(centers, 4., 1.6, mu)
+            result = _qlog_fit(np.ones(len(centers)), edges, centers, y,
+                np.ones(len(centers)), [1.6], centered=centered)
+            self.assertTrue(result.success, result.message)
+            self.assertAlmostEqual(result.b, 4., places=9)
+            self.assertAlmostEqual(result.mu, mu, places=9)
 
     def test_mean_scaled_river_mean_and_gaps(self):
         with tempfile.TemporaryDirectory() as directory:

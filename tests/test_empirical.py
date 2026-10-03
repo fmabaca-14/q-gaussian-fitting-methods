@@ -1,15 +1,44 @@
 """Checks for chronology, gaps and free-location empirical fits."""
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import numpy as np
 from scipy.stats import t
 
-from src.empirical import fit_histogram, load_increments
+from src.empirical import fit_histogram, load_increments, histogram
 
 
 class EmpiricalTests(unittest.TestCase):
+    def test_qlog_selects_regression_minimum_without_count_space_evaluation(self):
+        x = np.random.default_rng(14).standard_t(5, size=3000) + .1
+        grid = [1.2, 1.5, 1.8, 2.1]
+        _, edges, centers, y, sigma = histogram(x, 50)
+        scale = np.std(centers)
+        design = np.column_stack((np.ones(len(centers)), centers/scale, (centers/scale)**2))
+        scores = []
+        for q in grid:
+            response = np.expm1((1-q)*np.log(y))/(1-q)
+            weights = y**q/sigma
+            coef, _, _, _ = np.linalg.lstsq(design*weights[:,None], response*weights, rcond=None)
+            mu = -coef[1]*scale/(2*coef[2])
+            if coef[2] < 0 and edges[0] < mu < edges[-1]:
+                scores.append((float(np.sum(((response-design@coef)*weights)**2)), q))
+        score, q = min(scores)
+        with patch('src.empirical.q_gaussian_cdf', side_effect=AssertionError('CDF must not select q')):
+            result = fit_histogram(x, 50, 'qlog', q_grid=grid,
+                centered=False, weighting='poisson', qlog_selection='regression')
+        self.assertTrue(result.success)
+        self.assertEqual(result.q, q)
+        self.assertAlmostEqual(result.objective, score, places=7)
+
+    def test_default_qlog_selection_is_pearson(self):
+        x = np.random.default_rng(14).standard_t(5, size=1500)
+        result = fit_histogram(x, 50, 'qlog', q_grid=[1.2,1.5,1.8])
+        self.assertTrue(result.success)
+        self.assertIn('Pearson',result.message)
+
     def test_original_increment_definitions_and_gaps(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
@@ -23,7 +52,7 @@ class EmpiricalTests(unittest.TestCase):
                                "2020-01-06T23:59:59.999Z;2\n", encoding="utf-8")
             river.write_text("time,value\n2020-01-01,2\n2020-01-02,4\n"
                              "2020-01-04,8\n2020-01-05,4\n2020-01-06,2\n", encoding="utf-8")
-            data = load_increments(solar, bitcoin, river, discharge_transform="symmetric")
+            data = load_increments(solar, bitcoin, river, discharge_transform='symmetric')
             np.testing.assert_allclose(data["solar"]["x"], [2/3, -2/3, -2/3])
             np.testing.assert_allclose(data["bitcoin"]["x"],
                                        [np.log(2), -np.log(2), -np.log(2)])

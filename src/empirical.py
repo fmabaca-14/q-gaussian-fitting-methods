@@ -1,4 +1,4 @@
-"""Paper estimators: mu=0, uniform PDF errors, original Pearson-selected q-log.
+"""Paper estimators: mu=0, uniform PDF errors, Pearson-selected q-log with shape-preserving b recovery.
 
 No sample mean or median is subtracted. Historical free-location/Poisson fits
 remain available through explicit keyword arguments.
@@ -90,12 +90,16 @@ def _negative_log_likelihood(x, b, q, mu):
     return -len(x) * log_a + np.log1p((q - 1) * b * (x - mu) ** 2).sum() / (q - 1)
 
 
-def _qlog_fit(counts, edges, centers, heights, sigma, q_grid, centered=True):
+def _qlog_fit(counts, edges, centers, heights, sigma, q_grid, centered=True,
+              selection="pearson_counts"):
     """Regress ln_q density on (1,x²), or (1,x,x²) for historical free mu.
 
-    The intercept is fitted freely; the slope is mapped to b using normalized
-    q-Gaussian amplitude. Bin-center approximation can be poor in sparse tails.
+    The intercept and slope determine the inverse q-log curve shape. Recover
+    b from both, normalize that shape, then score integrated expected counts.
+    Bin-center approximation can be poor in sparse tails.
     """
+    if selection not in {"regression", "pearson_counts"}:
+        raise ValueError("qlog_selection must be regression or pearson_counts")
     grid = np.asarray(q_grid, dtype=float)
     if grid.ndim != 1 or not len(grid) or not np.all(np.isfinite(grid)) or np.any((grid <= 1) | (grid >= 3)):
         raise ValueError("q_grid must contain finite values strictly between 1 and 3")
@@ -117,28 +121,45 @@ def _qlog_fit(counts, edges, centers, heights, sigma, q_grid, centered=True):
             continue
         mu = 0.0 if centered else -coef[1] * scale / (2 * coef[2])
         slope = coef[-1] / scale**2
-        log_b = 2 * (np.log(-slope) - (1 - q) * np.log(q_gaussian_norm(1, q))) / (3 - q)
-        if not np.isfinite(log_b) or not -20 < log_b < 20 or (
-                not centered and not edges[0] < mu < edges[-1]):
+        if not centered and not edges[0] < mu < edges[-1]:
             continue
-        b = np.exp(log_b)
-        expected = counts.sum() * np.diff(q_gaussian_cdf(edges, b, q, mu))
-        score = np.sum((counts - expected)**2 / np.maximum(expected, 1e-10))
+        # Complete the square for the free-location quadratic, so A is the
+        # transformed value at mu, not the polynomial intercept at x=0.
+        intercept = float(coef[0] - slope * mu**2)
+        denominator = 1 + (1-q) * intercept
+        if not np.isfinite(denominator) or denominator <= 0:
+            continue
+        b = float(-slope / denominator)
+        if not np.isfinite(b) or b <= 0:
+            continue
+        if selection == "regression":
+            # Experimental option; keep original propagated weights in J_reg.
+            with np.errstate(over="ignore", invalid="ignore"):
+                residual = (response - design @ coef) * np.exp(log_weight)
+                score = float(np.sum(residual**2))
+        else:
+            # Full normalized CDF; no renormalization to the observed range.
+            expected = counts.sum() * np.diff(q_gaussian_cdf(edges, b, q, mu))
+            score = float(np.sum((counts - expected)**2 / np.maximum(expected, 1e-10)))
         if np.isfinite(score):
-            candidates.append((float(score), float(b), float(q), float(mu)))
+            candidates.append((score, b, float(q), float(mu)))
     if not candidates:
         return EmpiricalFit("qlog", message="no valid q-log candidate")
     score, b, q, mu = min(candidates)
-    return EmpiricalFit("qlog", b, q, mu, True, score,
-                        "q selected by Pearson histogram score")
+    message = ("q selected by Pearson expected counts; b from intercept and slope"
+               if selection == "pearson_counts" else
+               "experimental weighted q-log regression SSE; b from intercept and slope")
+    return EmpiricalFit("qlog", b, q, mu, True, score, message)
 
 
 def fit_histogram(x, bins=50, method="pdf", q_grid=Q_GRID, *,
-                  centered=True, weighting="uniform"):
+                  centered=True, weighting="uniform", qlog_selection="pearson_counts"):
     """Fit PDF/q-log with paper defaults; weighting refers to PDF errors.
 
     Q-log propagates uniform PDF errors: its squared regression weights are
-    density**(2*q). It still selects q by Pearson expected-count discrepancies.
+    density**(2*q). For each q, recover b from the intercept and slope, then
+    select q by Pearson expected counts computed from the normalized CDF.
+    Transformed SSE selection is available explicitly as regression.
     """
     x = np.asarray(x, dtype=float)
     if x.ndim != 1 or len(x) < 3 or not np.all(np.isfinite(x)) or np.ptp(x) == 0:
@@ -148,7 +169,8 @@ def fit_histogram(x, bins=50, method="pdf", q_grid=Q_GRID, *,
     counts, edges, centers, heights, sigma = histogram(x, bins)
     errors = np.ones_like(sigma) if weighting == "uniform" else sigma
     if method == "qlog":
-        return _qlog_fit(counts, edges, centers, heights, errors, q_grid, centered)
+        return _qlog_fit(counts, edges, centers, heights, errors, q_grid, centered,
+                        qlog_selection)
     if method != "pdf":
         raise ValueError("Histogram method must be pdf or qlog")
     sd = np.std(x, ddof=1)

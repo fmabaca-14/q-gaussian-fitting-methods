@@ -19,9 +19,16 @@ Monte Carlo y el protocolo anterior mediante `protocol="legacy"`.
 - Q-log: método original con intercepto libre, ahora regresión contra `1,x²`.
   Usa errores uniformes en la PDF, propagados a `ln_q`: los pesos de los
   residuos cuadrados son `density**(2*q)`. No usa sigma Poisson en la regresión.
-  Deriva b de la pendiente y la normalización, y selecciona q en la grilla
-  1.02–2.98 (paso 0.01) minimizando **Pearson** sobre todos los bins.
-  No es el estimador experimental que selecciona por SSE transformada.
+  Para cada q de la grilla 1.02–2.98 (paso 0.01), minimiza **J_reg** y
+  recupera `b=-B/[1+(1-q)*A]` usando intercepto y pendiente, con `B<0`
+  y denominador positivo. Normaliza la forma resultante y calcula las cuentas
+  esperadas como `N*(CDF(edge_right)-CDF(edge_left))`. Selecciona q minimizando
+  **J_p de Pearson** sobre todos los bins, incluidos los vacíos. Esta es la
+  opción por defecto `qlog_selection="pearson_counts"`. El criterio de SSE
+  transformada se conserva únicamente como opción explícita `"regression"`.
+  Con mu libre, A es el valor del polinomio en su vértice, no en x=0.
+  La normalización posterior puede cambiar la amplitud ajustada; la selección
+  se evalúa sobre esa PDF final. No se renormaliza al rango observado.
 - MLE y CDF: optimización con dos parámetros libres, b y q; mu queda fijado.
 
 Los diagnósticos Poisson (`chi2_hist`) permanecen como medidas descriptivas:
@@ -217,9 +224,11 @@ elección del histograma y no tiene unidades probabilísticas.
 
 **Estado del análisis empírico (30/09/2026):** se mantiene el q-log original
 de `src/empirical.py`, entonces con `mu` libre y selección por Pearson.
-Desde octubre, el principal conserva Pearson pero fija `mu=0` y usa errores
-uniformes en la PDF. La variante de SSE transformada se conserva como
-implementación experimental para estudiar sus diferencias.
+El 1 de octubre el principal fijó `mu=0` y errores PDF uniformes conservando
+Pearson. El 3 de octubre se probaron selección por `J_reg` y por error relativo;
+finalmente se restauró Pearson en el espacio de cuentas con recuperación de b
+desde intercepto y pendiente. Los resultados anteriores no son resultados de
+esta versión corregida. El historial siguiente describe la variante anterior.
 
 La comparación con los tres datasets y el barrido de 10 a 200 bins, en pasos
 de 5, mostró mayor variabilidad de los parámetros de la variante nueva y
