@@ -116,11 +116,30 @@ El ajuste directo reproduce el histograma de **ancho uniforme** en todo el
 rango, omite bins vacíos y pondera las densidades con
 `sqrt(count)/(N*width)`. MLE optimiza la log-verosimilitud individual; CDF
 minimiza el error cuadrático frente a la CDF empírica. Q-log recorre q con
-paso 0.01, ajusta `ln_q(density)` frente a `1, x, x²`, deriva `mu` del
-vértice y `b` de la pendiente y la normalización; selecciona el candidato
-por un score de Pearson sobre todos los conteos. Los bins amplios en colas
+paso 0.01 y ajusta `ln_q(density)` frente a `1, x, x²`. Para cada q minimiza
+el error ponderado J_reg de esa regresión, selecciona el menor J_reg de toda
+la grilla y sólo entonces recupera b de la pendiente y la normalización;
+mu se obtiene del vértice. No calcula conteos esperados para elegir q.
+Los bins amplios en colas
 hacen que la aproximación en centros de bin del q-log sea especialmente
 frágil. Estos cuatro métodos optimizan **objetivos diferentes**.
+
+**Cambio de criterio (03/10/2026):** el q-log empírico ahora selecciona por
+J_reg, usando los errores Poisson propagados ya presentes. No se ha modificado
+la ubicación libre ni la ponderación. `objective` guarda ese J_reg; ya no
+contiene el score de Pearson. Los scripts existentes que llaman al q-log
+usan el nuevo criterio y sus resultados deben regenerarse en otra carpeta
+para compararlos con las salidas anteriores. Para reproducir la selección
+anterior de conteos se puede especificar:
+
+```python
+legacy = fit_histogram(x, bins=100, method="qlog", qlog_selection="pearson_counts")
+current = fit_histogram(x, bins=100, method="qlog", qlog_selection="regression")
+```
+
+El criterio compara errores de regresiones cuya transformación y varianza
+cambian con q; no es una verosimilitud común. El intercepto sigue libre y
+puede no ser compatible con el de la PDF normalizada reconstruida.
 
 Desde la raíz del repositorio, con los tres archivos en `data/raw/`:
 
@@ -195,9 +214,11 @@ elección del histograma y no tiene unidades probabilísticas.
 
 ## Variante q-log centrada con selección por error ponderado
 
-**Estado del análisis empírico (30/09/2026):** se mantiene el q-log original
+**Estado histórico del análisis empírico (30/09/2026):** se mantuvo el q-log original
 de `src/empirical.py`, con `mu` libre y selección por Pearson, como método
-principal de la comparación. La variante centrada se conserva como
+principal de la comparación. Esa selección ahora se puede reproducir con
+`qlog_selection="pearson_counts"`; desde el 03/10 el valor predeterminado es
+J_reg. La variante centrada se conserva como
 implementación experimental para estudiar sus diferencias.
 
 La comparación con los tres datasets y el barrido de 10 a 200 bins, en pasos
@@ -238,7 +259,7 @@ datasets = load_increments(
     "data/raw/daily-data-mean.xls",
 )
 x = datasets["bitcoin"]["x"]
-original = fit_histogram(x, bins=100, method="qlog")
+original = fit_histogram(x, bins=100, method="qlog", qlog_selection="pearson_counts")
 centered, scan = fit_centered_qlog(x, bins=100, return_scan=True)
 scan_table = pd.DataFrame(scan)
 thresholds = tail_thresholds(x)

@@ -12,7 +12,9 @@ def fit_centered_qlog(x, bins=50, q_grid=Q_GRID, return_scan=False):
     Data are NOT centered. For every q, weighted least squares use
     sigma_lnq = density**(-q)*sigma_density. Select the smallest raw weighted
     sum of squared residuals across valid grid candidates. This is a different
-    objective from Pearson selection in empirical.fit_histogram(..., 'qlog').
+    objective from the legacy Pearson selection in empirical.fit_histogram
+    (..., 'qlog', qlog_selection='pearson_counts'). The current empirical
+    default also selects regression SSE, but estimates a free mu.
 
     The freely fitted intercept is not constrained by PDF normalization.
     b is inferred from the slope and a(b,q)=a(1,q)*sqrt(b), as in the existing
