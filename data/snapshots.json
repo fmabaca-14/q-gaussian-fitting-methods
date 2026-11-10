@@ -1,0 +1,20 @@
+{
+  "solar": {
+    "file": "1980-2024 np.txt",
+    "sha256": "5c36a08d4258ad9784d3112e9b4f253bd8d8c6bab9c8ff98878a190ce183ca89",
+    "observations_sha256": "c06c5aeea9bc0680708c62e3354baa5ac02528ee08af2572b50e428d57e2a460",
+    "n_increments": 296197
+  },
+  "bitcoin": {
+    "file": "Bitcoin_15_10_2013-14_12_2013_historical_data_coinmarketcap.xls",
+    "sha256": "47023afb45a86e93badbb26c77b225b51225c3fd96249bdd35a6f2503da1de43",
+    "observations_sha256": "a040b0e97eb77df5b80ea174c2c5d682174f3f7247ecb158243e6a4b96286b1e",
+    "n_increments": 4799
+  },
+  "discharge": {
+    "file": "daily-data-mean.xls",
+    "sha256": "362b72c85f767e6342e09c50bf5d01ba575a0daaac6b3cae0c94c4e7ce78210e",
+    "observations_sha256": "8bdb127833c59556fa77897bc9f7f53c9462680fa0c1e1ccdacc380170c09e3d",
+    "n_increments": 3651
+  }
+}
